@@ -1,0 +1,539 @@
+import anthropic
+import json
+import subprocess
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+
+class PatentAgent:
+    """专利代理基类"""
+    
+    def __init__(self, client: anthropic.Anthropic, role_name: str, system_prompt: str):
+        self.client = client
+        self.role_name = role_name
+        self.system_prompt = system_prompt
+        self.conversation_history = []
+        self.logger = logging.getLogger(f"Agent.{role_name}")
+    
+    def respond(self, user_message: str, context: Dict = None) -> str:
+        """生成响应"""
+        # 添加上下文信息
+        full_message = user_message
+        if context:
+            full_message = f"上下文信息:\n{json.dumps(context, ensure_ascii=False, indent=2)}\n\n{user_message}"
+        
+        self.conversation_history.append({
+            "role": "user",
+            "content": full_message
+        })
+        
+        try:
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                system=self.system_prompt,
+                messages=self.conversation_history
+            )
+            
+            assistant_message = response.content[0].text
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": assistant_message
+            })
+            
+            return assistant_message
+            
+        except Exception as e:
+            self.logger.error(f"API 调用失败: {e}")
+            return None
+    
+    def reset(self):
+        """重置对话历史"""
+        self.conversation_history = []
+
+
+class PatentWriter(PatentAgent):
+    """专利撰写代理"""
+    
+    def __init__(self, client: anthropic.Anthropic):
+        system_prompt = """你是一位资深的专利代理人,擅长撰写技术专利申请文件。
+
+你的职责:
+1. 分析技术创新点,识别可专利的核心技术
+2. 撰写符合专利格式的文档,包括:
+   - 技术领域
+   - 背景技术
+   - 发明内容(技术问题、技术方案、有益效果)
+   - 附图说明
+   - 具体实施方式
+   - 权利要求书
+
+撰写要求:
+- 语言准确、专业,符合专利法规范
+- 技术方案描述完整、清晰
+- 权利要求层次分明(独立权利要求+从属权利要求)
+- 使用 Mermaid 语法绘制技术流程图和架构图
+- 以 Markdown 格式输出完整文档
+
+输出格式:
+```markdown
+# [发明名称]
+
+## 技术领域
+...
+
+## 背景技术
+...
+
+## 发明内容
+
+### 要解决的技术问题
+...
+
+### 技术方案
+...
+
+```mermaid
+graph TD
+    A[开始] --> B[步骤1]
+    B --> C[步骤2]
+```
+
+### 有益效果
+...
+
+## 附图说明
+...
+
+## 具体实施方式
+...
+
+## 权利要求书
+
+1. 一种...,其特征在于...
+2. 根据权利要求1所述的...,其特征在于...
+```
+
+注意:每次撰写时要充分考虑审查员的反馈意见。"""
+        
+        super().__init__(client, "专利撰写员", system_prompt)
+
+
+class PatentReviewer(PatentAgent):
+    """专利审查代理"""
+    
+    def __init__(self, client: anthropic.Anthropic):
+        system_prompt = """你是一位严格的专利审查员,负责审查专利申请文件的合规性。
+
+你的职责:
+1. 检查专利文档是否符合《专利法》和《专利审查指南》要求
+2. 识别技术方案中的不足之处
+3. 提出具体的修改建议
+
+审查要点:
+- 新颖性:技术方案是否具有新颖性
+- 创造性:是否有显著进步和突出的技术效果
+- 实用性:能否在产业上制造或使用
+- 格式规范:是否符合专利文档格式要求
+- 权利要求:是否清楚、完整、得到说明书支持
+- 说明书:技术方案是否描述充分,能否实现
+- 附图:是否必要,标注是否清晰
+
+输出格式(JSON):
+```json
+{
+    "overall_score": 85,
+    "qualified": false,
+    "issues": [
+        {
+            "section": "技术方案",
+            "severity": "major",
+            "description": "具体问题描述",
+            "suggestion": "修改建议"
+        }
+    ],
+    "strengths": ["优点1", "优点2"],
+    "summary": "总体评价和建议"
+}
+```
+
+severity 等级: critical(致命), major(严重), minor(轻微)
+qualified: true 表示可以通过,false 表示需要修改"""
+        
+        super().__init__(client, "专利审查员", system_prompt)
+
+
+class CodeAnalyzer:
+    """代码分析器,用于从代码中提取创新点"""
+    
+    @staticmethod
+    def analyze_directory(directory: Path) -> Dict:
+        """分析目录下的代码"""
+        code_files = []
+        
+        # 支持的代码文件扩展名
+        extensions = {'.py', '.js', '.java', '.go', '.rs', '.cpp', '.c', '.ts', '.jsx', '.tsx'}
+        
+        for file_path in directory.rglob('*'):
+            if file_path.suffix in extensions and file_path.is_file():
+                try:
+                    content = file_path.read_text(encoding='utf-8', errors='ignore')
+                    code_files.append({
+                        'path': str(file_path.relative_to(directory)),
+                        'language': file_path.suffix[1:],
+                        'content': content[:5000],  # 限制长度
+                        'lines': len(content.split('\n'))
+                    })
+                except Exception as e:
+                    logging.warning(f"无法读取文件 {file_path}: {e}")
+        
+        return {
+            'total_files': len(code_files),
+            'files': code_files[:20],  # 最多分析 20 个文件
+            'project_structure': CodeAnalyzer._get_structure(directory)
+        }
+    
+    @staticmethod
+    def _get_structure(directory: Path) -> str:
+        """获取项目结构"""
+        try:
+            result = subprocess.run(
+                ['tree', '-L', '3', '-I', '__pycache__|node_modules|.git'],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return result.stdout if result.returncode == 0 else "无法获取项目结构"
+        except:
+            return "无法获取项目结构"
+
+
+class PatentGeneratorSystem:
+    """专利生成系统主控制器"""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.client = anthropic.Anthropic(api_key=api_key)
+        self.writer = PatentWriter(self.client)
+        self.reviewer = PatentReviewer(self.client)
+        self.logger = logging.getLogger("PatentSystem")
+        
+    def generate_from_code(self, 
+                          directory: str, 
+                          iterations: int = 3,
+                          output_file: str = None) -> str:
+        """从代码目录生成专利"""
+        
+        self.logger.info(f"开始分析代码目录: {directory}")
+        
+        # 1. 分析代码
+        code_analysis = CodeAnalyzer.analyze_directory(Path(directory))
+        
+        # 2. 使用 Claude Code 提取创新点
+        innovation_points = self._extract_innovations_from_code(code_analysis)
+        
+        # 3. 迭代生成和审查
+        final_patent = self._iterative_generation(
+            innovation_points, 
+            iterations,
+            source_type="code"
+        )
+        
+        # 4. 保存文档
+        return self._save_patent(final_patent, output_file)
+    
+    def generate_from_idea(self, 
+                           idea: str, 
+                           iterations: int = 3,
+                           output_file: str = None) -> str:
+        """从创意想法生成专利"""
+        
+        self.logger.info("开始从创意生成专利")
+        
+        # 1. 使用 Claude Code 提取和扩展创新点
+        innovation_points = self._extract_innovations_from_idea(idea)
+        
+        # 2. 迭代生成和审查
+        final_patent = self._iterative_generation(
+            innovation_points, 
+            iterations,
+            source_type="idea"
+        )
+        
+        # 3. 保存文档
+        return self._save_patent(final_patent, output_file)
+    
+    def _extract_innovations_from_code(self, code_analysis: Dict) -> Dict:
+        """使用 Claude Code 从代码中提取创新点"""
+        
+        self.logger.info("使用 Claude Code 分析代码创新点...")
+        
+        # 构建提示
+        prompt = f"""分析以下项目代码,识别其中的技术创新点:
+
+项目结构:
+{code_analysis['project_structure']}
+
+代码文件数量: {code_analysis['total_files']}
+
+请识别:
+1. 核心技术创新(算法、架构、方法等)
+2. 解决的技术问题
+3. 相比现有技术的改进
+4. 可专利的技术特征
+
+以结构化 JSON 格式输出。
+"""
+        
+        # 调用 Claude Code CLI
+        result = self._call_claude_code(prompt, code_analysis)
+        
+        return result
+    
+    def _extract_innovations_from_idea(self, idea: str) -> Dict:
+        """从创意中提取创新点"""
+        
+        self.logger.info("使用 Claude Code 分析创意创新点...")
+        
+        prompt = f"""分析以下技术创意,提取可专利的创新点:
+
+创意描述:
+{idea}
+
+请:
+1. 识别核心技术创新
+2. 分析技术可行性
+3. 明确技术问题和解决方案
+4. 列举关键技术特征
+5. 设计技术实现方案
+
+以结构化 JSON 格式输出创新点分析。
+"""
+        
+        result = self._call_claude_code(prompt, {"idea": idea})
+        
+        return result
+    
+    def _call_claude_code(self, prompt: str, context: Dict) -> Dict:
+        """调用 Claude Code CLI"""
+        
+        # 将上下文写入临时文件
+        temp_dir = Path("./temp_patent")
+        temp_dir.mkdir(exist_ok=True)
+        
+        context_file = temp_dir / "context.json"
+        context_file.write_text(json.dumps(context, ensure_ascii=False, indent=2))
+        
+        prompt_file = temp_dir / "prompt.txt"
+        prompt_file.write_text(prompt)
+        
+        try:
+            # 调用 Claude Code(headless 模式)
+            result = subprocess.run(
+                [
+                    'claude',
+                    '-p',
+                    f'{prompt}\n\n参考上下文文件: {context_file}',
+                    '--permission-mode', 'acceptEdits',
+                    '--output-format', 'json'
+                ],
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode == 0:
+                # 解析 Claude Code 的输出
+                output_file = temp_dir / "innovation_analysis.json"
+                if output_file.exists():
+                    return json.loads(output_file.read_text())
+                else:
+                    # 从 stdout 解析
+                    return self._parse_claude_output(result.stdout)
+            else:
+                self.logger.error(f"Claude Code 执行失败: {result.stderr}")
+                return {"error": result.stderr}
+                
+        except Exception as e:
+            self.logger.error(f"调用 Claude Code 失败: {e}")
+            return {"error": str(e)}
+    
+    def _parse_claude_output(self, output: str) -> Dict:
+        """解析 Claude Code 的输出"""
+        try:
+            # 尝试提取 JSON
+            if "```json" in output:
+                start = output.find("```json") + 7
+                end = output.find("```", start)
+                json_str = output[start:end].strip()
+                return json.loads(json_str)
+            return {"raw_output": output}
+        except:
+            return {"raw_output": output}
+    
+    def _iterative_generation(self, 
+                             innovation_points: Dict, 
+                             iterations: int,
+                             source_type: str) -> str:
+        """迭代生成和审查专利文档"""
+        
+        self.logger.info(f"开始迭代生成(共 {iterations} 轮)...")
+        
+        # 第一轮:初始生成
+        current_patent = self._initial_generation(innovation_points, source_type)
+        
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info("第 1 轮:初始专利文档已生成")
+        self.logger.info(f"{'='*60}\n")
+        
+        # 迭代改进
+        for i in range(1, iterations):
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info(f"第 {i+1} 轮:审查和改进")
+            self.logger.info(f"{'='*60}\n")
+            
+            # 审查员审查
+            review_result = self._review_patent(current_patent, i)
+            
+            # 解析审查意见
+            review_data = self._parse_review(review_result)
+            
+            self.logger.info(f"审查评分: {review_data.get('overall_score', 'N/A')}")
+            self.logger.info(f"是否合格: {review_data.get('qualified', False)}")
+            
+            # 如果已经合格且是最后一轮,可以提前结束
+            if review_data.get('qualified', False) and i == iterations - 1:
+                self.logger.info("✅ 专利文档已达标!")
+                break
+            
+            # 根据审查意见改进
+            current_patent = self._improve_patent(current_patent, review_data)
+            
+        return current_patent
+    
+    def _initial_generation(self, innovation_points: Dict, source_type: str) -> str:
+        """初始生成专利文档"""
+        
+        prompt = f"""基于以下技术创新点,撰写一份完整的发明专利申请文件。
+
+创新点来源: {source_type}
+
+技术创新分析:
+{json.dumps(innovation_points, ensure_ascii=False, indent=2)}
+
+要求:
+1. 完整的专利文档结构
+2. 使用 Mermaid 语法绘制技术流程图和系统架构图
+3. 权利要求书要有层次(1个独立权利要求 + 3-5个从属权利要求)
+4. 技术方案描述要详细,能够实施
+5. 以 Markdown 格式输出
+
+请开始撰写:
+"""
+        
+        return self.writer.respond(prompt)
+    
+    def _review_patent(self, patent_content: str, round_num: int) -> str:
+        """审查专利文档"""
+        
+        prompt = f"""请审查以下专利申请文件(第 {round_num} 轮审查):
+
+{patent_content}
+
+请从专业角度严格审查,指出所有需要改进的地方。
+"""
+        
+        return self.reviewer.respond(prompt)
+    
+    def _parse_review(self, review_result: str) -> Dict:
+        """解析审查结果"""
+        try:
+            if "```json" in review_result:
+                start = review_result.find("```json") + 7
+                end = review_result.find("```", start)
+                json_str = review_result[start:end].strip()
+                return json.loads(json_str)
+            return {"raw_review": review_result, "qualified": False, "overall_score": 60}
+        except:
+            return {"raw_review": review_result, "qualified": False, "overall_score": 60}
+    
+    def _improve_patent(self, current_patent: str, review_data: Dict) -> str:
+        """根据审查意见改进专利"""
+        
+        issues = review_data.get('issues', [])
+        summary = review_data.get('summary', '')
+        
+        prompt = f"""请根据以下审查意见,修改和完善专利文档:
+
+当前专利文档:
+{current_patent}
+
+审查意见:
+{summary}
+
+具体问题:
+{json.dumps(issues, ensure_ascii=False, indent=2)}
+
+请针对性地修改,输出完整的改进后的专利文档。
+"""
+        
+        return self.writer.respond(prompt)
+    
+    def _save_patent(self, patent_content: str, output_file: Optional[str]) -> str:
+        """保存专利文档"""
+        
+        if output_file is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"patent_{timestamp}.md"
+        
+        output_path = Path(output_file)
+        output_path.write_text(patent_content, encoding='utf-8')
+        
+        self.logger.info(f"\n✅ 专利文档已保存: {output_path.absolute()}")
+        
+        return str(output_path.absolute())
+
+
+# 使用示例
+if __name__ == "__main__":
+    import sys
+    
+    # 创建系统
+    system = PatentGeneratorSystem()
+    
+    # 示例1: 从代码生成
+    if len(sys.argv) > 1 and sys.argv[1] == "code":
+        directory = sys.argv[2] if len(sys.argv) > 2 else "."
+        iterations = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+        
+        result = system.generate_from_code(
+            directory=directory,
+            iterations=iterations,
+            output_file="patent_from_code.md"
+        )
+        print(f"专利文档生成完成: {result}")
+    
+    # 示例2: 从创意生成
+    elif len(sys.argv) > 1 and sys.argv[1] == "idea":
+        idea = """
+        一种基于 AI 的智能代码审查系统,通过分析代码语义和上下文,
+        自动识别潜在的 bug、安全漏洞和性能问题,并提供修复建议。
+        系统采用多模型协作机制,结合静态分析和动态测试。
+        """
+        iterations = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+        
+        result = system.generate_from_idea(
+            idea=idea,
+            iterations=iterations,
+            output_file="patent_from_idea.md"
+        )
+        print(f"专利文档生成完成: {result}")
+    
+    else:
+        print("用法:")
+        print("  python patent_generator.py code [目录] [迭代次数]")
+        print("  python patent_generator.py idea [迭代次数]")

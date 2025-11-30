@@ -1,0 +1,313 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import threading
+import uuid
+from pathlib import Path
+import logging
+from datetime import datetime
+import json
+
+# 导入前面的专利生成系统
+# from patent_generator import PatentGeneratorSystem
+
+app = Flask(__name__)
+CORS(app)
+
+# 配置
+UPLOAD_FOLDER = Path('./uploads')
+OUTPUT_FOLDER = Path('./outputs')
+UPLOAD_FOLDER.mkdir(exist_ok=True)
+OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+# 任务状态存储
+tasks = {}
+
+# 日志配置
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class TaskStatus:
+    """任务状态"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+def run_patent_generation(task_id: str, mode: str, data: dict, iterations: int):
+    """后台运行专利生成任务"""
+    
+    try:
+        tasks[task_id]['status'] = TaskStatus.RUNNING
+        tasks[task_id]['progress'] = 0
+        
+        # 创建系统实例
+        from patent_generator import PatentGeneratorSystem
+        system = PatentGeneratorSystem()
+        
+        # 根据模式生成
+        if mode == 'code':
+            directory = data.get('directory', '.')
+            
+            # 更新进度
+            tasks[task_id]['progress'] = 10
+            tasks[task_id]['current_stage'] = '分析代码中...'
+            
+            output_file = OUTPUT_FOLDER / f"{task_id}.md"
+            result = system.generate_from_code(
+                directory=directory,
+                iterations=iterations,
+                output_file=str(output_file)
+            )
+            
+        elif mode == 'idea':
+            idea = data.get('idea', '')
+            
+            tasks[task_id]['progress'] = 10
+            tasks[task_id]['current_stage'] = '分析创意中...'
+            
+            output_file = OUTPUT_FOLDER / f"{task_id}.md"
+            result = system.generate_from_idea(
+                idea=idea,
+                iterations=iterations,
+                output_file=str(output_file)
+            )
+        
+        # 任务完成
+        tasks[task_id]['status'] = TaskStatus.COMPLETED
+        tasks[task_id]['progress'] = 100
+        tasks[task_id]['current_stage'] = '完成'
+        tasks[task_id]['result_file'] = str(output_file)
+        tasks[task_id]['completed_at'] = datetime.now().isoformat()
+        
+    except Exception as e:
+        logger.error(f"任务 {task_id} 失败: {e}")
+        tasks[task_id]['status'] = TaskStatus.FAILED
+        tasks[task_id]['error'] = str(e)
+        tasks[task_id]['progress'] = 0
+
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """健康检查"""
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
+
+
+@app.route('/api/generate/code', methods=['POST'])
+def generate_from_code():
+    """从代码生成专利"""
+    
+    data = request.json
+    directory = data.get('directory', '.')
+    iterations = data.get('iterations', 3)
+    
+    # 验证目录
+    dir_path = Path(directory)
+    if not dir_path.exists() or not dir_path.is_dir():
+        return jsonify({'error': '目录不存在'}), 400
+    
+    # 创建任务
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {
+        'id': task_id,
+        'mode': 'code',
+        'status': TaskStatus.PENDING,
+        'progress': 0,
+        'iterations': iterations,
+        'created_at': datetime.now().isoformat(),
+        'data': {'directory': directory}
+    }
+    
+    # 启动后台任务
+    thread = threading.Thread(
+        target=run_patent_generation,
+        args=(task_id, 'code', {'directory': directory}, iterations)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'task_id': task_id,
+        'status': 'started',
+        'message': '专利生成任务已启动'
+    })
+
+
+@app.route('/api/generate/idea', methods=['POST'])
+def generate_from_idea():
+    """从创意生成专利"""
+    
+    data = request.json
+    idea = data.get('idea', '')
+    iterations = data.get('iterations', 3)
+    
+    if not idea or len(idea) < 50:
+        return jsonify({'error': '创意描述太短,至少需要 50 个字符'}), 400
+    
+    # 创建任务
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {
+        'id': task_id,
+        'mode': 'idea',
+        'status': TaskStatus.PENDING,
+        'progress': 0,
+        'iterations': iterations,
+        'created_at': datetime.now().isoformat(),
+        'data': {'idea': idea}
+    }
+    
+    # 启动后台任务
+    thread = threading.Thread(
+        target=run_patent_generation,
+        args=(task_id, 'idea', {'idea': idea}, iterations)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'task_id': task_id,
+        'status': 'started',
+        'message': '专利生成任务已启动'
+    })
+
+
+@app.route('/api/tasks/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    """获取任务状态"""
+    
+    if task_id not in tasks:
+        return jsonify({'error': '任务不存在'}), 404
+    
+    task = tasks[task_id]
+    
+    return jsonify({
+        'id': task['id'],
+        'status': task['status'],
+        'progress': task['progress'],
+        'current_stage': task.get('current_stage', ''),
+        'iterations': task['iterations'],
+        'created_at': task['created_at'],
+        'completed_at': task.get('completed_at'),
+        'error': task.get('error')
+    })
+
+
+@app.route('/api/tasks', methods=['GET'])
+def list_tasks():
+    """列出所有任务"""
+    
+    task_list = [
+        {
+            'id': task['id'],
+            'mode': task['mode'],
+            'status': task['status'],
+            'progress': task['progress'],
+            'iterations': task['iterations'],
+            'created_at': task['created_at']
+        }
+        for task in tasks.values()
+    ]
+    
+    # 按创建时间倒序
+    task_list.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return jsonify({'tasks': task_list, 'total': len(task_list)})
+
+
+@app.route('/api/download/<task_id>', methods=['GET'])
+def download_patent(task_id):
+    """下载专利文档"""
+    
+    if task_id not in tasks:
+        return jsonify({'error': '任务不存在'}), 404
+    
+    task = tasks[task_id]
+    
+    if task['status'] != TaskStatus.COMPLETED:
+        return jsonify({'error': '任务尚未完成'}), 400
+    
+    result_file = task.get('result_file')
+    if not result_file or not Path(result_file).exists():
+        return jsonify({'error': '文件不存在'}), 404
+    
+    return send_file(
+        result_file,
+        as_attachment=True,
+        download_name=f"patent_{task_id[:8]}.md"
+    )
+
+
+@app.route('/api/preview/<task_id>', methods=['GET'])
+def preview_patent(task_id):
+    """预览专利文档"""
+    
+    if task_id not in tasks:
+        return jsonify({'error': '任务不存在'}), 404
+    
+    task = tasks[task_id]
+    
+    if task['status'] != TaskStatus.COMPLETED:
+        return jsonify({'error': '任务尚未完成'}), 400
+    
+    result_file = task.get('result_file')
+    if not result_file or not Path(result_file).exists():
+        return jsonify({'error': '文件不存在'}), 404
+    
+    content = Path(result_file).read_text(encoding='utf-8')
+    
+    return jsonify({
+        'task_id': task_id,
+        'content': content,
+        'file_name': Path(result_file).name
+    })
+
+
+@app.route('/api/tasks/<task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    """删除任务"""
+    
+    if task_id not in tasks:
+        return jsonify({'error': '任务不存在'}), 404
+    
+    # 删除结果文件
+    task = tasks[task_id]
+    result_file = task.get('result_file')
+    if result_file and Path(result_file).exists():
+        Path(result_file).unlink()
+    
+    # 删除任务记录
+    del tasks[task_id]
+    
+    return jsonify({'message': '任务已删除'})
+
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """获取统计信息"""
+    
+    total = len(tasks)
+    completed = sum(1 for t in tasks.values() if t['status'] == TaskStatus.COMPLETED)
+    running = sum(1 for t in tasks.values() if t['status'] == TaskStatus.RUNNING)
+    failed = sum(1 for t in tasks.values() if t['status'] == TaskStatus.FAILED)
+    
+    return jsonify({
+        'total_tasks': total,
+        'completed': completed,
+        'running': running,
+        'failed': failed,
+        'pending': total - completed - running - failed
+    })
+
+
+if __name__ == '__main__':
+    print("""
+    ╔════════════════════════════════════════════╗
+    ║   专利自动生成系统 API 服务器              ║
+    ╠════════════════════════════════════════════╣
+    ║   访问地址: http://localhost:5000          ║
+    ║   API 文档: http://localhost:5000/api/docs ║
+    ╚════════════════════════════════════════════╝
+    """)
+    
+    app.run(host='0.0.0.0', port=5000, debug=True)

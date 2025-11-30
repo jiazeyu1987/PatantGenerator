@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 专利自动生成系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .tab-active {
+            border-bottom: 3px solid #667eea;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- 头部 -->
+        <header class="gradient-bg text-white shadow-lg">
+            <div class="container mx-auto px-4 py-6">
+                <h1 class="text-3xl font-bold">🔬 AI 专利自动生成系统</h1>
+                <p class="text-gray-200 mt-2">基于多角色协作的智能专利撰写平台</p>
+            </div>
+        </header>
+
+        <div class="container mx-auto px-4 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左侧：输入区域 -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h2 class="text-2xl font-bold mb-6">生成专利文档</h2>
+                        
+                        <!-- 模式选择 -->
+                        <div class="flex border-b mb-6">
+                            <button onclick="switchMode('code')" id="tab-code" 
+                                    class="px-6 py-3 font-semibold transition tab-active">
+                                从代码生成
+                            </button>
+                            <button onclick="switchMode('idea')" id="tab-idea" 
+                                    class="px-6 py-3 font-semibold transition text-gray-600 hover:text-gray-800">
+                                从创意生成
+                            </button>
+                        </div>
+
+                        <!-- 从代码生成 -->
+                        <div id="mode-code" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    代码目录路径
+                                </label>
+                                <input type="text" id="code-directory" 
+                                       value="." 
+                                       placeholder="例如: ./my-project"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <p class="text-sm text-gray-500 mt-1">
+                                    系统将自动分析该目录下的代码并提取技术创新点
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 从创意生成 -->
+                        <div id="mode-idea" class="space-y-4 hidden">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    技术创意描述
+                                </label>
+                                <textarea id="idea-text" rows="8" 
+                                          placeholder="请详细描述您的技术创意，包括：&#10;1. 要解决的技术问题&#10;2. 核心技术方案&#10;3. 预期的技术效果&#10;4. 应用场景等&#10;&#10;建议至少 200 字以上..."
+                                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                                <p class="text-sm text-gray-500 mt-1">
+                                    <span id="idea-count">0</span> 字符 (建议至少 200 字)
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 迭代次数 -->
+                        <div class="mt-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                迭代优化轮数
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="iterations" min="1" max="10" value="3" 
+                                       class="flex-1"
+                                       oninput="updateIterations(this.value)">
+                                <span class="text-2xl font-bold text-blue-600 w-12 text-center" id="iterations-value">3</span>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-2">
+                                💡 每轮包含：专利撰写员撰写 → 审查员审查 → 根据反馈改进
+                            </p>
+                        </div>
+
+                        <!-- 生成按钮 -->
+                        <div class="mt-8">
+                            <button onclick="startGeneration()" 
+                                    id="generate-btn"
+                                    class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:from-blue-600 hover:to-purple-700 transition shadow-lg">
+                                🚀 开始生成专利文档
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 预览区域 -->
+                    <div id="preview-section" class="bg-white rounded-lg shadow-md p-6 mt-6 hidden">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold">文档预览</h2>
+                            <button onclick="downloadPatent()" 
+                                    class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition">
+                                📥 下载 Markdown
+                            </button>
+                        </div>
+                        <div id="patent-preview" class="prose max-w-none border-t pt-4"></div>
+                    </div>
+                </div>
+
+                <!-- 右侧：状态和历史 -->
+                <div class="lg:col-span-1 space-y-6">
+                    <!-- 当前任务状态 -->
+                    <div id="status-card" class="bg-white rounded-lg shadow-md p-6 hidden">
+                        <h3 class="text-xl font-bold mb-4">⚙️ 生成状态</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span id="status-stage">初始化中...</span>
+                                    <span id="status-progress">0%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div id="progress-bar" 
+                                         class="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                                         style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <div class="text-sm text-gray-600 space-y-2">
+                                <div class="flex items-center">
+                                    <span class="mr-2">🤖</span>
+                                    <span>专利撰写员：<span id="writer-status">待命</span></span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">👨‍⚖️</span>
+                                    <span>审查员：<span id="reviewer-status">待命</span></span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">🔄</span>
+                                    <span>当前轮次：<span id="current-iteration">0</span> / <span id="total-iterations">3</span></span>
+                                </div>
+                            </div>
+
+                            <div id="status-error" class="hidden bg-red-50 border border-red-200 rounded-lg p-3">
+                                <p class="text-red-600 text-sm"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 统计信息 -->
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h3 class="text-xl font-bold mb-4">📊 统计信息</h3>
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">总任务数</span>
+                                <span class="font-bold text-lg" id="stat-total">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">已完成</span>
+                                <span class="font-bold text-lg text-green-600" id="stat-completed">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">进行中</span>
+                                <span class="font-bold text-lg text-blue-600" id="stat-running">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">失败</span>
+                                <span class="font-bold text-lg text-red-600" id="stat-failed">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 历史任务 -->
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h3 class="text-xl font-bold mb-4">📝 历史任务</h3>
+                        <div id="task-history" class="space-y-2 max-h-96 overflow-y-auto">
+                            <p class="text-gray-500 text-sm">暂无历史任务</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let currentTaskId = null;
+        let pollInterval = null;
+        let currentMode = 'code';
+
+        // 初始化
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        loadStats();
+        loadTaskHistory();
+
+        // 切换模式
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-code').classList.toggle('hidden', mode !== 'code');
+            document.getElementById('mode-idea').classList.toggle('hidden', mode !== 'idea');
+            document.getElementById('tab-code').classList.toggle('tab-active', mode === 'code');
+            document.getElementById('tab-idea').classList.toggle('tab-active', mode === 'idea');
+            document.getElementById('tab-code').classList.toggle('text-gray-600', mode !== 'code');
+            document.getElementById('tab-idea').classList.toggle('text-gray-600', mode !== 'idea');
+        }
+
+        // 更新迭代次数
+        function updateIterations(value) {
+            document.getElementById('iterations-value').textContent = value;
+            document.getElementById('total-iterations').textContent = value;
+        }
+
+        // 字符计数
+        document.getElementById('idea-text')?.addEventListener('input', (e) => {
+            document.getElementById('idea-count').textContent = e.target.value.length;
+        });
+
+        // 开始生成
+        async function startGeneration() {
+            const btn = document.getElementById('generate-btn');
+            const iterations = parseInt(document.getElementById('iterations').value);
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成中...';
+
+            try {
+                let response;
+                
+                if (currentMode === 'code') {
+                    const directory = document.getElementById('code-directory').value;
+                    response = await fetch(`${API_BASE}/generate/code`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ directory, iterations })
+                    });
+                } else {
+                    const idea = document.getElementById('idea-text').value;
+                    if (idea.length < 50) {
+                        alert('创意描述至少需要 50 个字符');
+                        btn.disabled = false;
+                        btn.textContent = '🚀 开始生成专利文档';
+                        return;
+                    }
+                    response = await fetch(`${API_BASE}/generate/idea`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ idea, iterations })
+                    });
+                }
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentTaskId = data.task_id;
+                    showStatusCard();
+                    startPolling();
+                } else {
+                    alert('启动失败: ' + data.error);
+                }
+            } catch (error) {
+                alert('请求失败: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 开始生成专利文档';
+            }
+        }
+
+        // 显示状态卡片
+        function showStatusCard() {
+            document.getElementById('status-card').classList.remove('hidden');
+            document.getElementById('preview-section').classList.add('hidden');
+        }
+
+        // 开始轮询
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            
+            pollInterval = setInterval(async () => {
+                if (!currentTaskId) return;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/tasks/${currentTaskId}`);
+                    const task = await response.json();
+                    
+                    updateStatus(task);
+                    
+                    if (task.status === 'completed') {
+                        clearInterval(pollInterval);
+                        loadPreview(currentTaskId);
+                        loadStats();
+                        loadTaskHistory();
+                    } else if (task.status === 'failed') {
+                        clearInterval(pollInterval);
+                        showError(task.error);
+                    }
+                } catch (error) {
+                    console.error('轮询失败:', error);
+                }
+            }, 2000);
+        }
+
+        // 更新状态
+        function updateStatus(task) {
+            const progress = task.progress || 0;
+            document.getElementById('progress-bar').style.width = progress + '%';
+            document.getElementById('status-progress').textContent = progress + '%';
+            document.getElementById('status-stage').textContent = task.current_stage || '处理中...';
+            
+            // 模拟角色状态
+            if (progress < 50) {
+                document.getElementById('writer-status').textContent = '撰写中...';
+                document.getElementById('reviewer-status').textContent = '待命';
+            } else {
+                document.getElementById('writer-status').textContent = '完成';
+                document.getElementById('reviewer-status').textContent = '审查中...';
+            }
+        }
+
+        // 显示错误
+        function showError(error) {
+            const errorDiv = document.getElementById('status-error');
+            errorDiv.classList.remove('hidden');
+            errorDiv.querySelector('p').textContent = error;
+        }
+
+        // 加载预览
+        async function loadPreview(taskId) {
+            try {
+                const response = await fetch(`${API_BASE}/preview/${taskId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const preview = document.getElementById('patent-preview');
+                    preview.innerHTML = marked.parse(data.content);
+                    
+                    // 渲染 Mermaid 图表
+                    mermaid.init(undefined, preview.querySelectorAll('.language-mermaid'));
+                    
+                    document.getElementById('preview-section').classList.remove('hidden');
+                    document.getElementById('status-card').classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('加载预览失败:', error);
+            }
+        }
+
+        // 下载专利
+        async function downloadPatent() {
+            if (!currentTaskId) return;
+            window.open(`${API_BASE}/download/${currentTaskId}`, '_blank');
+        }
+
+        // 加载统计
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/stats`);
+                const stats = await response.json();
+                
+                document.getElementById('stat-total').textContent = stats.total_tasks;
+                document.getElementById('stat-completed').textContent = stats.completed;
+                document.getElementById('stat-running').textContent = stats.running;
+                document.getElementById('stat-failed').textContent = stats.failed;
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+
+        // 加载历史任务
+        async function loadTaskHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/tasks`);
+                const data = await response.json();
+                
+                const container = document.getElementById('task-history');
+                
+                if (data.tasks.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">暂无历史任务</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.tasks.map(task => `
+                    <div class="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
+                         onclick="viewTask('${task.id}')">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold">${task.mode === 'code' ? '📁 代码' : '💡 创意'}</span>
+                            <span class="text-xs px-2 py-1 rounded ${getStatusClass(task.status)}">
+                                ${getStatusText(task.status)}
+                            </span>
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            ${new Date(task.created_at).toLocaleString('zh-CN')}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('加载历史失败:', error);
+            }
+        }
+
+        function getStatusClass(status) {
+            const classes = {
+                completed: 'bg-green-100 text-green-800',
+                running: 'bg-blue-100 text-blue-800',
+                failed: 'bg-red-100 text-red-800',
+                pending: 'bg-gray-100 text-gray-800'
+            };
+            return classes[status] || classes.pending;
+        }
+
+        function getStatusText(status) {
+            const texts = {
+                completed: '完成',
+                running: '运行中',
+                failed: '失败',
+                pending: '等待'
+            };
+            return texts[status] || status;
+        }
+
+        function viewTask(taskId) {
+            currentTaskId = taskId;
+            loadPreview(taskId);
+        }
+
+        // 定期刷新
+        setInterval(() => {
+            loadStats();
+            loadTaskHistory();
+        }, 10000);
+    </script>
+</body>
+</html>
