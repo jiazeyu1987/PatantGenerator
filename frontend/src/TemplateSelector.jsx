@@ -1,0 +1,353 @@
+import React, { useState, useEffect } from 'react';
+
+/**
+ * 模板选择组件
+ * 允许用户选择专利生成使用的模板
+ */
+function TemplateSelector({ selectedTemplateId, onTemplateChange, disabled = false }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [analysisResults, setAnalysisResults] = useState({});
+  const [analyzingTemplates, setAnalyzingTemplates] = useState(new Set());
+
+  // 加载模板列表
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const response = await fetch('/api/templates/');
+
+        if (!response.ok) {
+          throw new Error(`获取模板列表失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.ok) {
+          throw new Error(data.error || '获取模板列表失败');
+        }
+
+        setTemplates(data.templates || []);
+
+        // 如果没有选择模板但有默认模板，自动选择默认模板
+        if (!selectedTemplateId && data.default_template_id) {
+          onTemplateChange(data.default_template_id);
+        }
+
+        // 自动加载已分析模板的分析结果
+        const analysisPromises = data.templates
+          .filter(template => template.has_analysis)
+          .map(template => loadTemplateAnalysis(template.id));
+
+        // 并行加载分析结果
+        await Promise.allSettled(analysisPromises);
+      } catch (err) {
+        console.error('加载模板列表失败:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, [selectedTemplateId, onTemplateChange]);
+
+  // 处理模板选择变化
+  const handleTemplateChange = (event) => {
+    const templateId = event.target.value;
+    onTemplateChange(templateId);
+
+    // 自动加载分析结果（如果还没有的话）
+    if (templateId && !analysisResults[templateId]) {
+      loadTemplateAnalysis(templateId);
+    }
+  };
+
+  // 加载模板分析结果
+  const loadTemplateAnalysis = async (templateId) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}/analysis`);
+      if (!response.ok) {
+        return; // 忽略分析结果不存在的错误
+      }
+
+      const data = await response.json();
+      if (data.ok && data.analysis) {
+        setAnalysisResults(prev => ({
+          ...prev,
+          [templateId]: data.analysis
+        }));
+      }
+    } catch (err) {
+      console.warn(`加载模板分析结果失败 ${templateId}:`, err);
+    }
+  };
+
+  // 分析指定模板
+  const analyzeTemplate = async (templateId) => {
+    if (analyzingTemplates.has(templateId)) {
+      return;
+    }
+
+    setAnalyzingTemplates(prev => new Set(prev).add(templateId));
+
+    try {
+      const response = await fetch(`/api/templates/${templateId}/analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ force_reanalyze: true })
+      });
+
+      if (!response.ok) {
+        throw new Error(`分析模板失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.ok && data.analysis) {
+        setAnalysisResults(prev => ({
+          ...prev,
+          [templateId]: data.analysis
+        }));
+      }
+    } catch (err) {
+      console.error('分析模板失败:', err);
+      setError(`分析模板失败: ${err.message}`);
+    } finally {
+      setAnalyzingTemplates(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(templateId);
+        return newSet;
+      });
+    }
+  };
+
+  // 刷新模板列表
+  const refreshTemplates = async () => {
+    try {
+      const response = await fetch('/api/templates/reload', { method: 'POST' });
+
+      if (!response.ok) {
+        throw new Error(`刷新模板列表失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || '刷新模板列表失败');
+      }
+
+      // 重新加载模板列表
+      const templatesResponse = await fetch('/api/templates/');
+      const templatesData = await templatesResponse.json();
+
+      if (templatesData.ok) {
+        setTemplates(templatesData.templates || []);
+      }
+    } catch (err) {
+      console.error('刷新模板列表失败:', err);
+      setError(err.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="field">
+        <label>专利模板</label>
+        <div className="template-loading">
+          <span>正在加载模板列表...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="field">
+        <label>专利模板</label>
+        <div className="template-error">
+          <span>加载失败: {error}</span>
+          <button
+            type="button"
+            onClick={refreshTemplates}
+            className="refresh-btn"
+            disabled={disabled}
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (templates.length === 0) {
+    return (
+      <div className="field">
+        <label>专利模板</label>
+        <div className="template-empty">
+          <span>暂无可用模板文件</span>
+          <small>
+            请将 .docx 模板文件放置在 <code>backend/templates_store</code> 目录下，
+            然后点击刷新按钮重新加载。
+          </small>
+          <button
+            type="button"
+            onClick={refreshTemplates}
+            className="refresh-btn"
+            disabled={disabled}
+          >
+            刷新
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="field">
+      <label htmlFor="templateSelect">专利模板</label>
+      <div className="template-selector">
+        <select
+          id="templateSelect"
+          value={selectedTemplateId || ''}
+          onChange={handleTemplateChange}
+          disabled={disabled}
+        >
+          <option value="">选择模板（可选）</option>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+              {template.is_default && ' (默认)'}
+              {!template.is_valid && ' [无效]'}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={refreshTemplates}
+          className="refresh-btn"
+          title="刷新模板列表"
+          disabled={disabled}
+        >
+          🔄
+        </button>
+      </div>
+
+      {selectedTemplateId && (
+        <div className="template-info">
+          {(() => {
+            const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+            if (!selectedTemplate) return null;
+
+            const analysis = analysisResults[selectedTemplateId];
+
+            return (
+              <div className="template-details">
+                <div className="template-description">
+                  {selectedTemplate.description || '无描述'}
+                </div>
+                <div className="template-meta">
+                  <small>
+                    状态: {selectedTemplate.is_valid ? '✅ 有效' : '❌ 无效'} |
+                    占位符: {selectedTemplate.placeholder_count || 0} 个 |
+                    章节数: {selectedTemplate.sections || 0} 个
+                  </small>
+                </div>
+
+                {/* 分析结果展示 */}
+                {analysis && (
+                  <div className="template-analysis">
+                    <div className="analysis-header">
+                      <strong>模板分析结果</strong>
+                      {analyzingTemplates.has(selectedTemplateId) && (
+                        <span className="analyzing-indicator">分析中...</span>
+                      )}
+                    </div>
+
+                    <div className="analysis-metrics">
+                      <div className="metric">
+                        <span className="metric-label">复杂度:</span>
+                        <span className={`metric-value complexity-${analysis.complexity_score > 0.7 ? 'high' : analysis.complexity_score > 0.4 ? 'medium' : 'low'}`}>
+                          {(analysis.complexity_score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="metric">
+                        <span className="metric-label">质量评分:</span>
+                        <span className={`metric-value quality-${analysis.quality_score > 0.7 ? 'high' : analysis.quality_score > 0.4 ? 'medium' : 'low'}`}>
+                          {(analysis.quality_score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="metric">
+                        <span className="metric-label">模板类型:</span>
+                        <span className="metric-value">{analysis.template_type}</span>
+                      </div>
+                    </div>
+
+                    {analysis.applicable_domains && analysis.applicable_domains.length > 0 && (
+                      <div className="analysis-domains">
+                        <span className="metric-label">适用领域:</span>
+                        <div className="domain-tags">
+                          {analysis.applicable_domains.map((domain, index) => (
+                            <span key={index} className="domain-tag">{domain}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="analysis-actions">
+                      <button
+                        type="button"
+                        onClick={() => analyzeTemplate(selectedTemplateId)}
+                        className="analyze-btn"
+                        disabled={analyzingTemplates.has(selectedTemplateId)}
+                      >
+                        {analyzingTemplates.has(selectedTemplateId) ? '分析中...' : '重新分析'}
+                      </button>
+                    </div>
+
+                    {analysis.suggestions && analysis.suggestions.length > 0 && (
+                      <div className="analysis-suggestions">
+                        <strong>改进建议:</strong>
+                        <ul>
+                          {analysis.suggestions.slice(0, 2).map((suggestion, index) => (
+                            <li key={index}>{suggestion}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 如果没有分析结果，显示分析按钮 */}
+                {!analysis && (
+                  <div className="template-analysis-actions">
+                    <button
+                      type="button"
+                      onClick={() => analyzeTemplate(selectedTemplateId)}
+                      className="analyze-btn"
+                      disabled={analyzingTemplates.has(selectedTemplateId)}
+                    >
+                      {analyzingTemplates.has(selectedTemplateId) ? '分析中...' : '分析模板'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      <small>
+        选择模板后，生成的专利文档将按照选定模板的格式生成 DOCX 文件。
+        如果不选择模板，将只生成 Markdown 格式文件。
+      </small>
+    </div>
+  );
+}
+
+export default TemplateSelector;

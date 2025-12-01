@@ -228,6 +228,43 @@ def validate_output_name(name: Any) -> Optional[str]:
     return clean_name
 
 
+def validate_template_id(template_id: Any) -> Optional[str]:
+    """
+    验证模板ID参数
+
+    Args:
+        template_id: 用户输入的模板ID
+
+    Returns:
+        验证后的模板ID，如果为空或None则返回None
+
+    Raises:
+        ValidationError: 模板ID无效时抛出
+    """
+    if template_id is None or template_id == "":
+        return None
+
+    if not isinstance(template_id, str):
+        raise ValidationError("模板ID必须是字符串类型")
+
+    clean_template_id = template_id.strip()
+
+    if not clean_template_id:
+        return None
+
+    # 检查模板ID长度
+    if len(clean_template_id) > 100:
+        raise ValidationError("模板ID长度超过限制")
+
+    # 检查危险字符
+    dangerous_chars = ['<', '>', ':', '"', '|', '?', '*', '/', '\\']
+    for char in dangerous_chars:
+        if char in clean_template_id:
+            raise ValidationError(f"模板ID包含不安全字符: {char}")
+
+    return clean_template_id
+
+
 def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     验证请求数据完整性
@@ -266,6 +303,10 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
     output_name = data.get("outputName") or data.get("output_name")
     validated_data["output_name"] = validate_output_name(output_name)
+
+    # 验证模板ID参数
+    template_id = data.get("templateId") or data.get("template_id")
+    validated_data["template_id"] = validate_template_id(template_id)
 
     return validated_data
 

@@ -29,6 +29,13 @@ prompt:
 
   final_instruction: "请直接输出完整、可独立阅读的 Markdown 专利文档，不要额外附加解释说明。"
 
+# 简化的模板章节配置 - 只保留模板标题信息
+dynamic_sections:
+  template_info:
+    title: "【使用模板】"
+    generator: "template_title_only"
+    condition: "has_template_id"
+
 # 迭代阶段配置
 iteration_phases:
   first_iteration:

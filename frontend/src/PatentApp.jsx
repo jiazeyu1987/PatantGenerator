@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import TemplateSelector from "./TemplateSelector";
 
 function PatentApp() {
   const [mode, setMode] = useState("code");
@@ -6,6 +7,7 @@ function PatentApp() {
   const [ideaText, setIdeaText] = useState("");
   const [iterations, setIterations] = useState(3);
   const [outputName, setOutputName] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [status, setStatus] = useState("");
   const [resultText, setResultText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,7 +60,19 @@ function PatentApp() {
         setStatus(data.message || `任务进行中... (${data.progress || 0}%)`);
 
         if (data.status === "completed") {
-          setResultText(`任务完成！\n\n输出文件：${data.result.outputPath}\n迭代轮数：${data.result.iterations}\n\n最后一轮评审预览：\n${data.result.lastReview ? data.result.lastReview.substring(0, 1000) + "..." : "无"}`);
+          let resultText = `任务完成！\n\n输出文件：${data.result.outputPath}\n迭代轮数：${data.result.iterations}`;
+
+          // 如果使用了模板，添加 DOCX 文件信息
+          if (data.result.docx_path) {
+            resultText += `\nDOCX 文件：${data.result.docx_path}`;
+            if (data.result.template_used) {
+              resultText += `\n使用模板：${data.result.template_id || '未知'}`;
+            }
+          }
+
+          resultText += `\n\n最后一轮评审预览：\n${data.result.lastReview ? data.result.lastReview.substring(0, 1000) + "..." : "无"}`;
+
+          setResultText(resultText);
           setLoading(false);
           return true;
         } else if (data.status === "failed") {
@@ -117,10 +131,11 @@ function PatentApp() {
             },
             body: JSON.stringify({
               mode,
-            projectPath,
-            ideaText,
-            iterations: Number(iterations) || 1,
-            outputName
+              projectPath,
+              ideaText,
+              iterations: Number(iterations) || 1,
+              outputName,
+              templateId: selectedTemplateId || null
             })
           });
         } catch (networkError) {
@@ -190,7 +205,8 @@ function PatentApp() {
               projectPath,
               ideaText,
               iterations: Number(iterations) || 1,
-              outputName
+              outputName,
+              templateId: selectedTemplateId || null
             })
           });
         } catch (networkError) {
@@ -430,6 +446,12 @@ function PatentApp() {
                 onChange={(event) => setOutputName(event.target.value)}
               />
             </div>
+
+            <TemplateSelector
+              selectedTemplateId={selectedTemplateId}
+              onTemplateChange={setSelectedTemplateId}
+              disabled={loading}
+            />
 
             <div className="actions">
               <button type="submit" disabled={loading}>

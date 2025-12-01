@@ -10,6 +10,7 @@ from validators import ValidationError, validate_request_data, sanitize_error_me
 from task_manager import get_task_manager, TaskStatus
 from config import get_config
 from chat_log_api import register_chat_log_api
+from template_api import register_template_api
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # For production, serve the built React app from frontend/dist
@@ -27,6 +28,9 @@ def create_app() -> Flask:
 
     # 注册聊天日志 API
     register_chat_log_api(app)
+
+    # 注册模板管理 API
+    register_template_api(app)
 
     return app
 
@@ -93,14 +97,16 @@ def generate() -> Any:
         # 获取参数
         iterations = validated_data["iterations"]
         output_name = validated_data["output_name"]
+        template_id = validated_data.get("template_id")
 
         # 执行专利生成
         try:
-            logger.info(f"开始生成专利，迭代次数: {iterations}")
+            logger.info(f"开始生成专利，迭代次数: {iterations}，使用模板: {template_id or '无'}")
             result = run_patent_iteration(
                 context=context,
                 iterations=iterations,
-                base_name=output_name
+                base_name=output_name,
+                template_id=template_id
             )
             logger.info(f"专利生成成功: {result.get('output_path')}")
         except Exception as e:
@@ -171,6 +177,7 @@ def generate_async() -> Any:
         mode = validated_data["mode"]
         iterations = validated_data["iterations"]
         output_name = validated_data["output_name"]
+        template_id = validated_data.get("template_id")
 
         # 构建上下文
         if mode == "code":
@@ -197,7 +204,8 @@ def generate_async() -> Any:
             run_patent_iteration,
             context=context,
             iterations=iterations,
-            base_name=output_name
+            base_name=output_name,
+            template_id=template_id
         )
 
         logger.info(f"异步任务已提交，任务ID: {task_id}")
