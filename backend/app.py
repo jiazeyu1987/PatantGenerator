@@ -9,6 +9,7 @@ from patent_workflow import run_patent_iteration
 from validators import ValidationError, validate_request_data, sanitize_error_message, categorize_error
 from task_manager import get_task_manager, TaskStatus
 from config import get_config
+from chat_log_api import register_chat_log_api
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # For production, serve the built React app from frontend/dist
@@ -23,6 +24,9 @@ def create_app() -> Flask:
     # 应用 Flask 配置
     flask_config = config.get_flask_config()
     app.config.update(flask_config)
+
+    # 注册聊天日志 API
+    register_chat_log_api(app)
 
     return app
 

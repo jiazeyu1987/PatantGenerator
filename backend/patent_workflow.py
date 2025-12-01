@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from llm_client import call_llm
+from prompt_manager import get_prompt, PromptKeys
 
 
 def build_writer_prompt(
@@ -12,6 +13,49 @@ def build_writer_prompt(
     iteration: int,
     total_iterations: int,
 ) -> str:
+    """
+    使用配置化提示词构建专利撰写提示词
+
+    Args:
+        context: 技术背景和创新点上下文
+        previous_draft: 上一版专利草案
+        previous_review: 上一轮评审意见
+        iteration: 当前迭代轮次
+        total_iterations: 总迭代轮次
+
+    Returns:
+        构建完成的提示词字符串
+    """
+    try:
+        # 使用提示词管理器获取配置化提示词
+        prompt = get_prompt(
+            PromptKeys.PATENT_WRITER,
+            context=context,
+            previous_draft=previous_draft,
+            previous_review=previous_review,
+            iteration=iteration,
+            total_iterations=total_iterations
+        )
+        return prompt
+    except Exception as e:
+        # 如果配置化提示词失败，回退到原始硬编码提示词
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"使用配置化提示词失败，回退到硬编码提示词: {e}")
+
+        return _build_writer_prompt_fallback(
+            context, previous_draft, previous_review, iteration, total_iterations
+        )
+
+
+def _build_writer_prompt_fallback(
+    context: str,
+    previous_draft: Optional[str],
+    previous_review: Optional[str],
+    iteration: int,
+    total_iterations: int,
+) -> str:
+    """硬编码提示词回退方案"""
     parts = []
     parts.append("你现在扮演一名资深的中国发明专利撰写专家。")
     parts.append("目标：基于给定的技术背景和创新点，撰写一份结构完整、符合中国专利法和实务规范的发明专利草案。")
@@ -60,6 +104,46 @@ def build_reviewer_prompt(
     iteration: int,
     total_iterations: int,
 ) -> str:
+    """
+    使用配置化提示词构建专利评审提示词
+
+    Args:
+        context: 技术背景和创新点上下文
+        current_draft: 当前待评审的专利草案
+        iteration: 当前评审轮次
+        total_iterations: 总评审轮次
+
+    Returns:
+        构建完成的提示词字符串
+    """
+    try:
+        # 使用提示词管理器获取配置化提示词
+        prompt = get_prompt(
+            PromptKeys.PATENT_REVIEWER,
+            context=context,
+            current_draft=current_draft,
+            iteration=iteration,
+            total_iterations=total_iterations
+        )
+        return prompt
+    except Exception as e:
+        # 如果配置化提示词失败，回退到原始硬编码提示词
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"使用配置化提示词失败，回退到硬编码提示词: {e}")
+
+        return _build_reviewer_prompt_fallback(
+            context, current_draft, iteration, total_iterations
+        )
+
+
+def _build_reviewer_prompt_fallback(
+    context: str,
+    current_draft: str,
+    iteration: int,
+    total_iterations: int,
+) -> str:
+    """硬编码提示词回退方案"""
     parts = []
     parts.append("你现在扮演一名资深专利代理人 / 合规审查专家。")
     parts.append("任务：对下面的专利草案进行严格审查，找出所有可能的合规风险、缺陷和可改进之处，并给出条理清晰的修改建议。")

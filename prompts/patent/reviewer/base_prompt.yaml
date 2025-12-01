@@ -1,0 +1,61 @@
+# 专利评审基础提示词配置
+# 版本: 1.0.0
+# 最后更新: 2024-12-01
+
+metadata:
+  name: "专利评审基础提示词"
+  version: "1.0.0"
+  description: "用于评审中国发明专利申请文档的基础提示词模板"
+  author: "Patent Generator System"
+  created_date: "2024-12-01"
+  tags: ["patent", "reviewer", "chinese", "invention", "compliance"]
+
+# 基础提示词模板
+prompt:
+  role: "你现在扮演一名资深专利代理人 / 合规审查专家。"
+
+  task: "任务：对下面的专利草案进行严格审查，找出所有可能的合规风险、缺陷和可改进之处，并给出条理清晰的修改建议。"
+
+  review_focus:
+    - "是否充分体现并保护核心创新点；"
+    - "权利要求书是否具备新颖性、创造性和实用性，是否存在过窄或过宽的问题；"
+    - "是否存在模糊、主观或不清楚的表述；"
+    - "是否有与背景技术、实施例不一致的地方；"
+    - "mermaid 图是否与文字描述一致，是否存在遗漏或不清晰的环节；"
+    - "是否有明显的专利法或实务上的违反之处。"
+
+  output_format: |
+    请以 Markdown 输出评审结果，包含以下部分：概览评语、问题清单（分条列出，每条包括问题描述和修改建议）、总体风险评估。
+    不要重写专利全文，只给出评审和修改建议。
+
+# 上下文章节配置
+context_sections:
+  tech_context:
+    title: "【技术背景与创新点上下文】"
+    placeholder: "{{context}}"
+
+  current_draft:
+    title: "【当前专利草案】"
+    placeholder: "{{current_draft}}"
+
+# 模板变量说明
+variables:
+  iteration:
+    type: "int"
+    description: "当前评审轮次"
+    example: 1
+
+  total_iterations:
+    type: "int"
+    description: "总评审轮次"
+    example: 3
+
+  context:
+    type: "string"
+    description: "技术背景和创新点上下文"
+    required: true
+
+  current_draft:
+    type: "string"
+    description: "当前待评审的专利草案"
+    required: true

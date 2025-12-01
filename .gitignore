@@ -369,6 +369,7 @@ reports/
 llm_cache/
 conversation_history/
 chat_logs/
+chat_prompt_*.log
 
 # Temporary user uploads
 user_uploads/

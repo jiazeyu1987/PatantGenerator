@@ -90,6 +90,24 @@ class LoggingConfig:
     file_max_size: int = 10 * 1024 * 1024  # 10MB
     file_backup_count: int = 5
     console_enabled: bool = True
+    # LLM 聊天日志配置
+    chat_log_enabled: bool = True
+    chat_log_dir: str = "chat_logs"
+    chat_log_max_files: int = 1000
+    chat_log_format: str = "%Y-%m-%d %H:%M:%S"
+
+
+@dataclass
+class PromptConfig:
+    """提示词配置"""
+    # 提示词目录配置
+    prompts_dir: str = "prompts"
+    # 提示词管理配置
+    auto_reload: bool = True  # 自动重新加载提示词配置
+    cache_enabled: bool = True  # 启用提示词缓存
+    # 提示词验证配置
+    validate_on_load: bool = True  # 加载时验证提示词
+    strict_mode: bool = False  # 严格模式：验证失败时抛出异常
 
 
 @dataclass
@@ -112,6 +130,7 @@ class Config:
         self.security = SecurityConfig()
         self.logging = LoggingConfig()
         self.storage = StorageConfig()
+        self.prompt = PromptConfig()
 
         # 加载环境变量配置
         self._load_from_env()
@@ -174,11 +193,23 @@ class Config:
         self.logging.file_path = os.getenv("LOG_FILE_PATH", self.logging.file_path)
         self.logging.console_enabled = os.getenv("LOG_CONSOLE_ENABLED", "true").lower() == "true"
 
+        # LLM 聊天日志配置
+        self.logging.chat_log_enabled = os.getenv("CHAT_LOG_ENABLED", "true").lower() == "true"
+        self.logging.chat_log_dir = os.getenv("CHAT_LOG_DIR", self.logging.chat_log_dir)
+        self.logging.chat_log_max_files = int(os.getenv("CHAT_LOG_MAX_FILES", str(self.logging.chat_log_max_files)))
+
         # 存储配置
         self.storage.output_dir = os.getenv("OUTPUT_DIR", self.storage.output_dir)
         self.storage.max_output_files = int(os.getenv("MAX_OUTPUT_FILES", str(self.storage.max_output_files)))
         self.storage.cleanup_enabled = os.getenv("STORAGE_CLEANUP_ENABLED", "true").lower() == "true"
         self.storage.cleanup_days = int(os.getenv("STORAGE_CLEANUP_DAYS", str(self.storage.cleanup_days)))
+
+        # 提示词配置
+        self.prompt.prompts_dir = os.getenv("PROMPTS_DIR", self.prompt.prompts_dir)
+        self.prompt.auto_reload = os.getenv("PROMPT_AUTO_RELOAD", "true").lower() == "true"
+        self.prompt.cache_enabled = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() == "true"
+        self.prompt.validate_on_load = os.getenv("PROMPT_VALIDATE_ON_LOAD", "true").lower() == "true"
+        self.prompt.strict_mode = os.getenv("PROMPT_STRICT_MODE", "false").lower() == "true"
 
     def _validate_config(self) -> None:
         """验证配置的有效性"""
@@ -259,6 +290,20 @@ class Config:
         output_path.mkdir(parents=True, exist_ok=True)
         return str(output_path.absolute())
 
+    def ensure_chat_log_dir(self) -> str:
+        """确保聊天日志目录存在"""
+        chat_log_path = Path(self.logging.chat_log_dir)
+        chat_log_path.mkdir(parents=True, exist_ok=True)
+        return str(chat_log_path.absolute())
+
+    def get_prompts_dir(self) -> str:
+        """获取提示词配置目录路径"""
+        # 如果是相对路径，则相对于当前工作目录
+        prompts_path = Path(self.prompt.prompts_dir)
+        if not prompts_path.is_absolute():
+            prompts_path = Path.cwd() / prompts_path
+        return str(prompts_path.absolute())
+
     def to_dict(self) -> Dict[str, Any]:
         """将配置转换为字典格式（隐藏敏感信息）"""
         return {
@@ -308,12 +353,22 @@ class Config:
                 "file_enabled": self.logging.file_enabled,
                 "file_path": self.logging.file_path,
                 "console_enabled": self.logging.console_enabled,
+                "chat_log_enabled": self.logging.chat_log_enabled,
+                "chat_log_dir": self.logging.chat_log_dir,
+                "chat_log_max_files": self.logging.chat_log_max_files,
             },
             "storage": {
                 "output_dir": self.storage.output_dir,
                 "max_output_files": self.storage.max_output_files,
                 "cleanup_enabled": self.storage.cleanup_enabled,
                 "cleanup_days": self.storage.cleanup_days,
+            },
+            "prompt": {
+                "prompts_dir": self.prompt.prompts_dir,
+                "auto_reload": self.prompt.auto_reload,
+                "cache_enabled": self.prompt.cache_enabled,
+                "validate_on_load": self.prompt.validate_on_load,
+                "strict_mode": self.prompt.strict_mode,
             }
         }
 

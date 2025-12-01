@@ -1,0 +1,66 @@
+# 代码分析基础提示词配置
+# 版本: 1.0.0
+# 最后更新: 2024-12-01
+
+metadata:
+  name: "代码分析基础提示词"
+  version: "1.0.0"
+  description: "用于分析代码并提取专利创新点的基础提示词模板"
+  author: "Patent Generator System"
+  created_date: "2024-12-01"
+  tags: ["code", "analyzer", "patent", "innovation", "extraction"]
+
+# 基础提示词模板
+prompt:
+  instruction: "Based on the overview above, extract the core technical ideas and potential innovation points that would be valuable for a patent."
+
+# 分析摘要模板
+analysis_summary:
+  header: "---"
+  title: "## Analysis Summary"
+  metrics:
+    - "处理文件数: {{processed_files}}"
+    - "成功分析: {{successful_files}}"
+    - "内容总量: {{total_content_size}} 字符"
+
+# 分析进度消息
+progress_messages:
+  start: "开始分析代码项目结构..."
+  scanning: "正在扫描目录..."
+  analyzing: "正在分析文件: {{filename}}"
+  completed: "分析完成，共处理 {{processed_files}} 个文件"
+  error: "错误: 代码分析失败 - {{error_message}}"
+
+# 输出格式配置
+output_format:
+  encoding: "utf-8"
+  line_separator: "\n"
+  include_statistics: true
+  include_progress: true
+
+# 模板变量说明
+variables:
+  processed_files:
+    type: "int"
+    description: "已处理的文件数量"
+    example: 25
+
+  successful_files:
+    type: "int"
+    description: "成功分析的文件数量"
+    example: 23
+
+  total_content_size:
+    type: "int"
+    description: "总内容字符数"
+    example: 15000
+
+  filename:
+    type: "string"
+    description: "当前处理的文件名"
+    example: "main.py"
+
+  error_message:
+    type: "string"
+    description: "错误消息"
+    example: "文件读取失败"

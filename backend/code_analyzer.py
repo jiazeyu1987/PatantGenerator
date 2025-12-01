@@ -4,6 +4,7 @@ import logging
 from typing import List, Iterator, Generator, Optional
 from pathlib import Path
 import mmap
+from prompt_manager import get_prompt, PromptKeys
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -298,18 +299,52 @@ def build_code_innovation_context_streaming(root_dir: str, progress_callback: Op
                 continue
 
         # 生成总结信息
-        summary_lines = [
-            "---",
-            f"## Analysis Summary",
-            f"- 处理文件数: {processed_files}",
-            f"- 成功分析: {successful_files}",
-            f"- 内容总量: {total_content_size} 字符",
-            "",
-            "Instruction: Based on the overview above, "
-            "extract the core technical ideas and potential innovation points "
-            "that would be valuable for a patent.",
-            ""
-        ]
+        try:
+            # 尝试使用配置化的分析摘要模板
+            summary_template = get_prompt(
+                PromptKeys.CODE_ANALYZER,
+                processed_files=processed_files,
+                successful_files=successful_files,
+                total_content_size=total_content_size
+            )
+
+            # 解析模板并添加指令
+            summary_lines = []
+            template_lines = summary_template.split('\n')
+
+            for line in template_lines:
+                if "{{processed_files}}" in line:
+                    line = line.replace("{{processed_files}}", str(processed_files))
+                if "{{successful_files}}" in line:
+                    line = line.replace("{{successful_files}}", str(successful_files))
+                if "{{total_content_size}}" in line:
+                    line = line.replace("{{total_content_size}}", str(total_content_size))
+                summary_lines.append(line)
+
+            # 添加提取指令
+            summary_lines.extend([
+                "",
+                "Instruction: Based on the overview above, "
+                "extract the core technical ideas and potential innovation points "
+                "that would be valuable for a patent.",
+                ""
+            ])
+
+        except Exception as e:
+            # 如果配置化提示词失败，回退到原始硬编码摘要
+            logger.warning(f"使用配置化代码分析提示词失败，回退到硬编码: {e}")
+            summary_lines = [
+                "---",
+                f"## Analysis Summary",
+                f"- 处理文件数: {processed_files}",
+                f"- 成功分析: {successful_files}",
+                f"- 内容总量: {total_content_size} 字符",
+                "",
+                "Instruction: Based on the overview above, "
+                "extract the core technical ideas and potential innovation points "
+                "that would be valuable for a patent.",
+                ""
+            ]
 
         # 最终进度更新
         if progress_callback:

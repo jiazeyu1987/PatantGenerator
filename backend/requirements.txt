@@ -4,6 +4,9 @@ Flask>=3.0.0,<4.0.0
 # Anthropic SDK - Claude LLM 集成
 anthropic>=0.34.0,<1.0.0
 
+# YAML 配置文件支持
+PyYAML>=6.0,<8.0
+
 # 开发和测试依赖 (可选)
 # 取消注释以下行来安装开发工具
 # pytest>=7.0.0
