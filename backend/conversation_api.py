@@ -187,16 +187,16 @@ def get_specific_conversation(task_id: str, round_number: int, role: str):
     Args:
         task_id: 任务ID
         round_number: 轮次编号
-        role: 角色 ('writer' or 'reviewer')
+        role: 角色 ('writer', 'modifier', or 'reviewer')
 
     Returns:
         JSON: 指定角色的对话
     """
     try:
-        if role not in ['writer', 'reviewer']:
+        if role not in ['writer', 'modifier', 'reviewer']:
             return jsonify({
                 'success': False,
-                'error': '无效的角色，必须是 writer 或 reviewer'
+                'error': '无效的角色，必须是 writer、modifier 或 reviewer'
             }), 400
 
         conversation_db = get_conversation_db()

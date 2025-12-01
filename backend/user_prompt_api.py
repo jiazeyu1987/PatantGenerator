@@ -1,7 +1,7 @@
 """
 用户自定义提示词API接口
 
-提供RESTful API来管理用户自定义的撰写者和审核者提示词。
+提供RESTful API来管理用户自定义的撰写者、修改者和审核者提示词。
 """
 
 import logging
@@ -75,6 +75,34 @@ def get_writer_prompt():
         }), 500
 
 
+@user_prompt_bp.route('/modifier', methods=['GET'])
+def get_modifier_prompt():
+    """
+    获取用户自定义修改者提示词
+
+    Returns:
+        JSON: 修改者提示词内容
+    """
+    try:
+        manager = get_user_prompt_manager()
+        prompt = manager.get_user_prompt('modifier')
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'prompt': prompt,
+                'has_custom_prompt': bool(prompt and prompt.strip())
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"获取修改者提示词失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"获取修改者提示词失败: {str(e)}"
+        }), 500
+
+
 @user_prompt_bp.route('/reviewer', methods=['GET'])
 def get_reviewer_prompt():
     """
@@ -111,6 +139,7 @@ def set_user_prompts():
     Request Body:
         {
             "writer": "撰写者提示词内容",
+            "modifier": "修改者提示词内容",
             "reviewer": "审核者提示词内容"
         }
 
@@ -141,6 +170,20 @@ def set_user_prompts():
             else:
                 results['writer'] = False
                 logger.error("撰写者提示词内容必须是字符串类型")
+
+        # 设置修改者提示词
+        if 'modifier' in data:
+            modifier_prompt = data['modifier']
+            if isinstance(modifier_prompt, str):
+                modifier_success = manager.set_user_prompt('modifier', modifier_prompt)
+                results['modifier'] = modifier_success
+                if modifier_success:
+                    logger.info(f"修改者提示词设置成功，长度: {len(modifier_prompt)}")
+                else:
+                    logger.error("修改者提示词设置失败")
+            else:
+                results['modifier'] = False
+                logger.error("修改者提示词内容必须是字符串类型")
 
         # 设置审核者提示词
         if 'reviewer' in data:
@@ -237,6 +280,59 @@ def set_writer_prompt():
         }), 500
 
 
+@user_prompt_bp.route('/modifier', methods=['POST'])
+def set_modifier_prompt():
+    """
+    设置用户自定义修改者提示词
+
+    Request Body:
+        {
+            "prompt": "修改者提示词内容"
+        }
+
+    Returns:
+        JSON: 设置结果
+    """
+    try:
+        data = request.get_json()
+        if not data or 'prompt' not in data:
+            return jsonify({
+                'success': False,
+                'error': "缺少提示词内容"
+            }), 400
+
+        prompt = data['prompt']
+        if not isinstance(prompt, str):
+            return jsonify({
+                'success': False,
+                'error': "提示词内容必须是字符串类型"
+            }), 400
+
+        manager = get_user_prompt_manager()
+        success = manager.set_user_prompt('modifier', prompt)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'message': '修改者提示词保存成功',
+                    'prompt_length': len(prompt)
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '修改者提示词保存失败'
+            }), 500
+
+    except Exception as e:
+        logger.error(f"设置修改者提示词失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"设置修改者提示词失败: {str(e)}"
+        }), 500
+
+
 @user_prompt_bp.route('/reviewer', methods=['POST'])
 def set_reviewer_prompt():
     """
@@ -323,6 +419,39 @@ def delete_writer_prompt():
         }), 500
 
 
+@user_prompt_bp.route('/modifier', methods=['DELETE'])
+def delete_modifier_prompt():
+    """
+    删除用户自定义修改者提示词
+
+    Returns:
+        JSON: 删除结果
+    """
+    try:
+        manager = get_user_prompt_manager()
+        success = manager.delete_user_prompt('modifier')
+
+        if success:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'message': '修改者提示词已重置为默认'
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '修改者提示词重置失败'
+            }), 500
+
+    except Exception as e:
+        logger.error(f"删除修改者提示词失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"删除修改者提示词失败: {str(e)}"
+        }), 500
+
+
 @user_prompt_bp.route('/reviewer', methods=['DELETE'])
 def delete_reviewer_prompt():
     """
@@ -370,10 +499,13 @@ def delete_all_user_prompts():
         # 删除撰写者提示词
         writer_success = manager.delete_user_prompt('writer')
 
+        # 删除修改者提示词
+        modifier_success = manager.delete_user_prompt('modifier')
+
         # 删除审核者提示词
         reviewer_success = manager.delete_user_prompt('reviewer')
 
-        overall_success = writer_success and reviewer_success
+        overall_success = writer_success and modifier_success and reviewer_success
 
         if overall_success:
             return jsonify({
@@ -382,6 +514,7 @@ def delete_all_user_prompts():
                     'message': '所有用户提示词已重置为默认',
                     'deleted': {
                         'writer': writer_success,
+                        'modifier': modifier_success,
                         'reviewer': reviewer_success
                     }
                 }
@@ -393,6 +526,7 @@ def delete_all_user_prompts():
                 'data': {
                     'deleted': {
                         'writer': writer_success,
+                        'modifier': modifier_success,
                         'reviewer': reviewer_success
                     }
                 }

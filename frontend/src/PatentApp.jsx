@@ -23,6 +23,7 @@ function PatentApp() {
   const [activeTab, setActiveTab] = useState("writer");
   const [userPrompts, setUserPrompts] = useState({
     writer: "",
+    modifier: "",
     reviewer: ""
   });
 
@@ -659,6 +660,19 @@ function PatentApp() {
                 撰写者提示词
               </button>
               <button
+                onClick={() => setActiveTab("modifier")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "modifier" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
+                  cursor: "pointer",
+                  marginRight: "2px"
+                }}
+              >
+                修改者提示词
+              </button>
+              <button
                 onClick={() => setActiveTab("reviewer")}
                 style={{
                   padding: "8px 16px",
@@ -677,7 +691,8 @@ function PatentApp() {
             <div style={{ marginBottom: "20px" }}>
               <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <label style={{ color: "#9ca3af", fontSize: "14px" }}>
-                  {activeTab === "writer" ? "撰写者提示词" : "审核者提示词"}
+                  {activeTab === "writer" ? "撰写者提示词" :
+                   activeTab === "modifier" ? "修改者提示词" : "审核者提示词"}
                 </label>
                 <span style={{ color: "#6b7280", fontSize: "12px" }}>
                   {userPrompts[activeTab].length} 字符
@@ -689,7 +704,7 @@ function PatentApp() {
                   ...prev,
                   [activeTab]: e.target.value
                 }))}
-                placeholder={`请输入${activeTab === "writer" ? "撰写者" : "审核者"}提示词...`}
+                placeholder={`请输入${activeTab === "writer" ? "撰写者" : activeTab === "modifier" ? "修改者" : "审核者"}提示词...`}
                 style={{
                   width: "100%",
                   height: "300px",
@@ -704,6 +719,50 @@ function PatentApp() {
                 }}
               />
             </div>
+
+            {/* 使用说明 - 修改者标签页 */}
+            {activeTab === "modifier" && (
+              <div style={{
+                marginBottom: "20px",
+                padding: "12px",
+                backgroundColor: "#1f2937",
+                borderRadius: "6px",
+                border: "1px solid #374151"
+              }}>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "13px",
+                  margin: "0 0 8px 0",
+                  lineHeight: "1.4"
+                }}>
+                  🔧 <strong>修改者角色说明：</strong>
+                </p>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "12px",
+                  margin: "0 0 4px 0",
+                  lineHeight: "1.4"
+                }}>
+                  修改者从第二轮开始介入，负责根据审批者的反馈意见对专利进行针对性的修改和优化。
+                </p>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "12px",
+                  margin: "0 0 4px 0",
+                  lineHeight: "1.4"
+                }}>
+                  <strong>主要职责：</strong>解决合规风险、优化权利要求、完善技术描述、提升专利质量。
+                </p>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "12px",
+                  margin: "0",
+                  lineHeight: "1.4"
+                }}>
+                  <strong>提示词建议：</strong>重点关注如何根据评审意见进行精准修改，保持核心创新点的同时提升专利的专业性和合规性。
+                </p>
+              </div>
+            )}
 
             {/* 使用说明 - 仅在审核者标签页显示 */}
             {activeTab === "reviewer" && (
@@ -734,7 +793,7 @@ function PatentApp() {
                     borderRadius: "3px",
                     color: "#60a5fa",
                     fontFamily: "monospace"
-                  }}>&lt;/text&gt;</code> 标记，系统会自动将其替换为当前轮次撰写者生成的专利内容。
+                  }}>&lt;/text&gt;</code> 标记，系统会自动将其替换为当前轮次的专利内容。
                 </p>
                 <p style={{
                   color: "#9ca3af",

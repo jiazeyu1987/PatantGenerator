@@ -54,6 +54,25 @@ def get_simple_prompt_engine():
 
 不要重写专利全文，只给出评审和修改建议。"""
 
+                self._default_modifier_prompt = """你现在扮演一名资深的中国发明专利修改专家。
+
+任务：基于给定的技术背景、上轮专利草案和评审意见，对专利文档进行针对性的修改和优化。
+
+修改原则：
+1. 精准回应：重点解决评审中指出的合规风险和缺陷
+2. 保持创新：确保核心技术创新点得到充分保护
+3. 结构优化：完善专利文档的逻辑结构和表述清晰度
+4. 权利要求强化：根据评审意见优化权利要求的范围和表述
+5. 技术准确性：确保技术描述准确、一致，消除模糊表述
+
+请直接输出修改后的完整专利 Markdown 文档，不要额外附加解释说明。
+
+注意：
+- 重点关注上一轮评审中发现的问题
+- 保持专利文档的完整性和专业性
+- 语言客观、严谨，避免营销化表述
+- 确保修改后的文档符合中国专利法要求"""
+
                 logger.info("SimplePromptEngine 初始化完成")
 
             def get_writer_prompt(self, context, previous_draft=None, previous_review=None, iteration=1, total_iterations=1):
@@ -110,6 +129,53 @@ def get_simple_prompt_engine():
                 except Exception as e:
                     logger.error(f"检查用户审核者提示词失败: {e}")
                     return self._default_reviewer_prompt
+
+            def get_modifier_prompt(self, context, previous_draft, previous_review, iteration=1, total_iterations=1):
+                logger.info("=== 开始获取修改者提示词 ===")
+
+                try:
+                    user_prompt = self.user_prompt_manager.get_user_prompt('modifier')
+                    logger.info(f"用户修改者提示词检查: 存在={bool(user_prompt)}")
+
+                    if user_prompt and user_prompt.strip():
+                        logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
+                        logger.info(f"用户提示词开头: {user_prompt[:100]}...")
+
+                        # 检查是否包含动态标记（支持新标记和向后兼容）
+                        has_markers = ("</text>" in user_prompt or
+                                      "<previous_output>" in user_prompt or
+                                      "<previous_review>" in user_prompt)
+
+                        if has_markers:
+                            logger.info("检测到动态标记，使用动态替换模式")
+                            if "</text>" in user_prompt:
+                                logger.info("  - 检测到</text>标记（向后兼容）")
+                            if "<previous_output>" in user_prompt:
+                                logger.info("  - 检测到<previous_output>标记（新功能）")
+                            if "<previous_review>" in user_prompt:
+                                logger.info("  - 检测到<previous_review>标记（新功能）")
+
+                            final_prompt = _build_prompt_from_template(
+                                user_prompt,
+                                context=context,
+                                previous_draft=previous_draft,
+                                previous_review=previous_review,
+                                iteration=iteration,
+                                total_iterations=total_iterations,
+                                strict_mode=True
+                            )
+                        else:
+                            logger.info("✅ 使用用户自定义修改者提示词（100%原样，无动态标记）")
+                            final_prompt = user_prompt
+
+                        return final_prompt
+                    else:
+                        logger.info("用户未设置修改者提示词，使用系统默认")
+                        return self._default_modifier_prompt
+
+                except Exception as e:
+                    logger.error(f"检查用户修改者提示词失败: {e}")
+                    return self._default_modifier_prompt
 
         return SimplePromptEngine()
 
@@ -484,31 +550,56 @@ def run_patent_iteration(
 
             update_progress(base_progress, f"第 {i}/{total} 轮：准备撰写阶段")
 
-            # 撰写阶段 - 使用新的简单提示词引擎
+            # 撰写/修改阶段 - 根据轮次选择不同角色
             simple_prompt_engine = get_simple_prompt_engine()
-            writer_prompt = simple_prompt_engine.get_writer_prompt(
-                context=context,
-                previous_draft=draft,
-                previous_review=review,
-                iteration=i,
-                total_iterations=total
-            )
-            update_progress(writer_progress - 5, f"第 {i}/{total} 轮：调用 LLM 撰写专利")
-            draft = call_llm(writer_prompt)
-            update_progress(writer_progress, f"第 {i}/{total} 轮：专利撰写完成")
 
-            # 记录撰写者对话到数据库
+            if i == 1:
+                # 第一轮：使用撰写者
+                update_progress(base_progress, f"第 {i}/{total} 轮：撰写者创建初始专利草案")
+                prompt_method = simple_prompt_engine.get_writer_prompt
+                role_name = 'writer'
+                role_display = '撰写者'
+            else:
+                # 第二轮及以后：使用修改者
+                update_progress(base_progress, f"第 {i}/{total} 轮：修改者优化专利草案")
+                prompt_method = simple_prompt_engine.get_modifier_prompt
+                role_name = 'modifier'
+                role_display = '修改者'
+
+            # 获取对应的提示词
+            if role_name == 'writer':
+                current_prompt = prompt_method(
+                    context=context,
+                    previous_draft=draft,
+                    previous_review=review,
+                    iteration=i,
+                    total_iterations=total
+                )
+            else:  # modifier
+                current_prompt = prompt_method(
+                    context=context,
+                    previous_draft=draft,
+                    previous_review=review,
+                    iteration=i,
+                    total_iterations=total
+                )
+
+            update_progress(writer_progress - 5, f"第 {i}/{total} 轮：调用 LLM ({role_display})")
+            draft = call_llm(current_prompt)
+            update_progress(writer_progress, f"第 {i}/{total} 轮：{role_display}工作完成")
+
+            # 记录对话到数据库
             if task_id and conversation_db:
                 try:
                     conversation_db.add_conversation_round(
                         task_id=task_id,
                         round_number=i,
-                        role='writer',
-                        prompt=writer_prompt,
+                        role=role_name,
+                        prompt=current_prompt,
                         response=draft
                     )
                 except Exception as e:
-                    logger.warning(f"记录撰写者对话失败: {e}")
+                    logger.warning(f"记录{role_display}对话失败: {e}")
 
             # 评审阶段 - 使用新的简单提示词引擎
             reviewer_prompt = simple_prompt_engine.get_reviewer_prompt(
@@ -670,26 +761,61 @@ def _build_prompt_from_template(
         prompt = template
 
         # 严格模式下的特殊处理：支持动态替换
-        if strict_mode and "</text>" in prompt:
-            logger.info("检测到</text>标记，启用动态内容替换")
-            if current_draft:
-                original_length = len(prompt)
-                prompt = prompt.replace("</text>", current_draft)
-                logger.info(f"成功替换</text>标记，替换内容长度: {len(current_draft)} 字符")
-                logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
-            else:
-                logger.warning("检测到</text>标记但没有current_draft内容，保持原标记")
-                # 将标记替换为友好的提示信息
-                prompt = prompt.replace("</text>", "[当前专利草案内容]")
-                logger.info("已将</text>标记替换为提示文本")
+        if strict_mode:
+            has_dynamic_markers = False
 
-        # 严格模式：直接返回（如果无需动态替换）
-        elif strict_mode:
-            logger.info(f"严格执行模式已启用：直接使用用户输入的提示词")
-            logger.info(f"严格模式提示词长度: {len(prompt)} 字符")
-            logger.info(f"严格模式提示词开头: {prompt[:100]}...")
-            logger.info(f"严格模式提示词结尾: {prompt[-50:] if len(prompt) > 50 else prompt}")
+            # 支持修改者专用标记 <previous_output>
+            if "<previous_output>" in prompt:
+                has_dynamic_markers = True
+                logger.info("检测到<previous_output>标记，启用动态内容替换")
+                if previous_draft:
+                    original_length = len(prompt)
+                    prompt = prompt.replace("<previous_output>", previous_draft)
+                    logger.info(f"成功替换<previous_output>标记，替换内容长度: {len(previous_draft)} 字符")
+                    logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
+                else:
+                    logger.warning("检测到<previous_output>标记但没有previous_draft内容，保持原标记")
+                    prompt = prompt.replace("<previous_output>", "[上轮专利生成结果]")
+
+            # 支持修改者专用标记 <previous_review>
+            if "<previous_review>" in prompt:
+                has_dynamic_markers = True
+                logger.info("检测到<previous_review>标记，启用动态内容替换")
+                if previous_review:
+                    original_length = len(prompt)
+                    prompt = prompt.replace("<previous_review>", previous_review)
+                    logger.info(f"成功替换<previous_review>标记，替换内容长度: {len(previous_review)} 字符")
+                    logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
+                else:
+                    logger.warning("检测到<previous_review>标记但没有previous_review内容，保持原标记")
+                    prompt = prompt.replace("<previous_review>", "[上轮审批评审意见]")
+
+            # 向后兼容：继续支持 </text> 标记
+            if "</text>" in prompt:
+                has_dynamic_markers = True
+                logger.info("检测到</text>标记，启用动态内容替换")
+                if current_draft:
+                    original_length = len(prompt)
+                    prompt = prompt.replace("</text>", current_draft)
+                    logger.info(f"成功替换</text>标记，替换内容长度: {len(current_draft)} 字符")
+                    logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
+                else:
+                    logger.warning("检测到</text>标记但没有current_draft内容，保持原标记")
+                    prompt = prompt.replace("</text>", "[当前专利草案内容]")
+                    logger.info("已将</text>标记替换为提示文本")
+
+            # 如果没有动态标记，直接返回原提示词
+            if not has_dynamic_markers:
+                logger.info(f"严格模式已启用：直接使用用户输入的提示词（无动态标记）")
+                logger.info(f"严格模式提示词长度: {len(prompt)} 字符")
+                logger.info(f"严格模式提示词开头: {prompt[:100]}...")
+                logger.info(f"严格模式提示词结尾: {prompt[-50:] if len(prompt) > 50 else prompt}")
+
+            # 严格模式处理完成，直接返回结果
+            logger.debug(f"严格模式处理完成，提示词总长度: {len(prompt)} 字符")
             return prompt
+
+        # 非严格模式正常处理流程
 
         # 正常模式：进行变量替换和内容增强
         # 替换基本变量

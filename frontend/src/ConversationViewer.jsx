@@ -16,6 +16,7 @@ function ConversationViewer({ taskId, visible }) {
   // 角色选项
   const roleOptions = [
     { value: "writer", label: "撰写者" },
+    { value: "modifier", label: "修改者" },
     { value: "reviewer", label: "审批者" }
   ];
 
@@ -36,6 +37,18 @@ function ConversationViewer({ taskId, visible }) {
   // 当选择的轮次或角色变化时，加载对话数据
   useEffect(() => {
     if (selectedRound !== null) {
+      // 根据轮次自动调整角色选择
+      if (selectedRound === 1) {
+        // 第一轮：默认选择撰写者
+        if (selectedRole === "modifier") {
+          setSelectedRole("writer");
+        }
+      } else {
+        // 第二轮及以后：默认选择修改者
+        if (selectedRole === "writer") {
+          setSelectedRole("modifier");
+        }
+      }
       loadConversation();
     }
   }, [selectedRound, selectedRole, taskId]);
@@ -177,7 +190,7 @@ function ConversationViewer({ taskId, visible }) {
             {/* 提示词部分 */}
             <div style={{ marginBottom: 24 }}>
               <Text strong style={{ fontSize: 14, color: "#1890ff" }}>
-                提示词 ({selectedRole === "writer" ? "撰写者" : "审批者"}):
+                提示词 ({selectedRole === "writer" ? "撰写者" : selectedRole === "modifier" ? "修改者" : "审批者"}):
               </Text>
               <div
                 style={{
@@ -237,7 +250,7 @@ function ConversationViewer({ taskId, visible }) {
           </div>
         ) : !error && !conversation ? (
           <div style={{ textAlign: "center", padding: 40, color: "#999" }}>
-            <div>该轮次暂无 {selectedRole === "writer" ? "撰写者" : "审批者"} 对话</div>
+            <div>该轮次暂无 {selectedRole === "writer" ? "撰写者" : selectedRole === "modifier" ? "修改者" : "审批者"} 对话</div>
           </div>
         ) : null}
       </Card>

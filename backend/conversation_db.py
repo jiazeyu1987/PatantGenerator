@@ -32,7 +32,7 @@ class ConversationRound:
     id: int
     task_id: str
     round_number: int
-    role: str  # 'writer' or 'reviewer'
+    role: str  # 'writer', 'modifier', or 'reviewer'
     prompt: str
     response: str
     timestamp: str
@@ -154,7 +154,7 @@ class ConversationDB:
         Args:
             task_id: 任务ID
             round_number: 轮次编号
-            role: 角色 ('writer' or 'reviewer')
+            role: 角色 ('writer', 'modifier', or 'reviewer')
             prompt: 提示词
             response: LLM响应
 
