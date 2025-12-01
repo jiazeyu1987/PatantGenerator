@@ -1,0 +1,375 @@
+# Patent Generator Project .gitignore
+
+# ================================
+# Environment and Configuration Files
+# ================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config.local.py
+secrets.json
+credentials.json
+
+# ================================
+# Python Files
+# ================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ================================
+# Virtual Environments
+# ================================
+venv/
+env/
+ENV/
+.venv/
+.env/
+virtualenv/
+.virtualenv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ================================
+# IDE and Editor Files
+# ================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/*.code-snippets
+.history/
+*.sublime-project
+*.sublime-workspace
+
+# ================================
+# Logs and Runtime Files
+# ================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+patent_generator.log
+patent_generator.log.*
+access.log
+error.log
+runtime.log
+
+# ================================
+# Node.js and Frontend
+# ================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ================================
+# Build Outputs and Cache
+# ================================
+build/
+dist/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.server/
+coverage/
+.nyc_output/
+
+# ================================
+# Backend Generated Files
+# ================================
+output/
+temp/
+tmp/
+uploads/
+downloads/
+export/
+generated/
+results/
+*.output
+*.patent
+*.pdf
+*.docx
+*.doc
+*.txt.bak
+*.tmp
+*.temp
+
+# ================================
+# Database Files
+# ================================
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db-journal
+
+# ================================
+# OS Generated Files
+# ================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ================================
+# Test Files and Coverage
+# ================================
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.nyc_output/
+.cache/
+nosetests.xml
+coverage.json
+
+# ================================
+# Jupyter Notebook
+# ================================
+.ipynb_checkpoints
+*.ipynb
+
+# ================================
+# IPython
+# ================================
+profile_default/
+ipython_config.py
+
+# ================================
+# pyenv
+# ================================
+.python-version
+
+# ================================
+# celery beat schedule file
+# ================================
+celerybeat-schedule
+
+# ================================
+# SageMath parsed files
+# ================================
+*.sage.py
+
+# ================================
+# Spyder project settings
+# ================================
+.spyderproject
+.spyproject
+
+# ================================
+# Rope project settings
+# ================================
+.ropeproject
+
+# ================================
+# mkdocs documentation
+# ================================
+/site
+
+# ================================
+# mypy
+# ================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ================================
+# Pyre type checker
+# ================================
+.pyre/
+
+# ================================
+# API Keys and Sensitive Data (patterns)
+# ================================
+# Claude/Anthropic
+ANTHROPIC_API_KEY*
+claude-api-key*
+api_key.txt
+secret.txt
+secrets.txt
+
+# OpenAI (if used)
+OPENAI_API_KEY*
+openai-api-key*
+
+# Other API keys
+*_API_KEY*
+*_TOKEN*
+*_SECRET*
+*_PASSWORD*
+
+# ================================
+# Task Manager and Worker Files
+# ================================
+worker.pid
+task_queue.db
+celeryworker*.log
+gunicorn.pid
+supervisor.sock
+
+# ================================
+# SSL Certificates
+# ================================
+*.pem
+*.key
+*.crt
+*.csr
+ssl/
+certs/
+
+# ================================
+# Backup Files
+# ================================
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+~*
+.~*
+
+# ================================
+# Archive Files
+# ================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.tar
+*.tgz
+
+# ================================
+# Large Generated Documents
+# ================================
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+# ================================
+# Local Development Files
+# ================================
+local_config.py
+dev_settings.py
+test_settings.py
+debug.log
+dev.log
+
+# ================================
+# Profiling and Benchmarking
+# ================================
+*.prof
+*.profile
+benchmark_results/
+profiling_output/
+
+# ================================
+# Experimental or Temporary Features
+# ================================
+experimental/
+sandbox/
+testing/
+temp_*
+test_*
+
+# ================================
+# Documentation Build
+# ================================
+docs/_build/
+docs/build/
+site/
+
+# ================================
+# Package Managers Lock Files (keep some for reproducibility)
+# ================================
+# Keep package-lock.json, yarn.lock, requirements.txt for reproducibility
+# But ignore others that can be regenerated
+pip-wheel-metadata/
+
+# ================================
+# Windows Specific
+# ================================
+*.lnk
+*.url
+*.url
+thumbs.db
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.msixbundle
+
+# ================================
+# Linux/Unix Specific
+# =================---------------
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ================================
+# Project Specific Patterns
+# ================================
+# Patent generation outputs
+patents/
+generated_patents/
+patent_drafts/
+patent_revisions/
+
+# Analysis results
+code_analysis/
+analysis_results/
+reports/
+
+# LLM cache and conversation history
+llm_cache/
+conversation_history/
+chat_logs/
+
+# Temporary user uploads
+user_uploads/
+temporary_files/
