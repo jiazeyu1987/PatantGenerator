@@ -18,6 +18,59 @@ function PatentApp() {
   const [currentTaskId, setCurrentTaskId] = useState(null); // 用于对话查看器
   const [showConversation, setShowConversation] = useState(false); // 控制对话查看器显示
 
+  // 设置相关状态
+  const [showSettings, setShowSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState("writer");
+  const [userPrompts, setUserPrompts] = useState({
+    writer: "",
+    reviewer: ""
+  });
+
+  // 加载用户提示词
+  const loadUserPrompts = async () => {
+    try {
+      const response = await fetch("/api/user/prompts");
+      const data = await response.json();
+
+      if (data.success) {
+        setUserPrompts(data.data.prompts);
+      }
+    } catch (error) {
+      console.error("加载用户提示词失败:", error);
+    }
+  };
+
+  // 保存用户提示词
+  const saveUserPrompts = async (prompts) => {
+    try {
+      const response = await fetch("/api/user/prompts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(prompts)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUserPrompts(prompts);
+        return true;
+      } else {
+        console.error("保存用户提示词失败:", data.error);
+        return false;
+      }
+    } catch (error) {
+      console.error("保存用户提示词失败:", error);
+      return false;
+    }
+  };
+
+  // 组件加载时获取用户提示词
+  useEffect(() => {
+    loadUserPrompts();
+  }, []);
+
   // 轮询任务状态
   const pollTaskStatus = async (taskId) => {
     const maxAttempts = 600; // 最多轮询10分钟
@@ -345,8 +398,27 @@ function PatentApp() {
   return (
     <div className="app">
       <header>
-        <h1>自动专利生成系统</h1>
-        <p>基于代码/创意 + 双角色多轮迭代 + Claude CLI</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h1>自动专利生成系统</h1>
+            <p>基于代码/创意 + 双角色多轮迭代 + Claude CLI</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#3b82f6",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "14px"
+            }}
+          >
+            ⚙️ 提示词设置
+          </button>
+        </div>
       </header>
 
       <main>
@@ -520,6 +592,166 @@ function PatentApp() {
           visible={showConversation}
         />
       </main>
+
+      {/* 设置弹窗 */}
+      {showSettings && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSettings(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#020617",
+              border: "1px solid #1f2937",
+              borderRadius: "12px",
+              padding: "24px",
+              width: "90%",
+              maxWidth: "800px",
+              maxHeight: "80vh",
+              overflow: "auto"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h2 style={{ margin: 0, color: "#e5e7eb" }}>提示词设置</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#9ca3af",
+                  fontSize: "24px",
+                  cursor: "pointer"
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 标签页 */}
+            <div style={{ marginBottom: "20px" }}>
+              <button
+                onClick={() => setActiveTab("writer")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "writer" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
+                  borderRadius: "6px 0 0 6px",
+                  cursor: "pointer",
+                  marginRight: "2px"
+                }}
+              >
+                撰写者提示词
+              </button>
+              <button
+                onClick={() => setActiveTab("reviewer")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "reviewer" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
+                  borderRadius: "0 6px 6px 0",
+                  cursor: "pointer"
+                }}
+              >
+                审核者提示词
+              </button>
+            </div>
+
+            {/* 编辑器 */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <label style={{ color: "#9ca3af", fontSize: "14px" }}>
+                  {activeTab === "writer" ? "撰写者提示词" : "审核者提示词"}
+                </label>
+                <span style={{ color: "#6b7280", fontSize: "12px" }}>
+                  {userPrompts[activeTab].length} 字符
+                </span>
+              </div>
+              <textarea
+                value={userPrompts[activeTab]}
+                onChange={(e) => setUserPrompts(prev => ({
+                  ...prev,
+                  [activeTab]: e.target.value
+                }))}
+                placeholder={`请输入${activeTab === "writer" ? "撰写者" : "审核者"}提示词...`}
+                style={{
+                  width: "100%",
+                  height: "300px",
+                  backgroundColor: "#020617",
+                  color: "#e5e7eb",
+                  border: "1px solid #374151",
+                  borderRadius: "6px",
+                  padding: "12px",
+                  fontFamily: "monospace",
+                  fontSize: "14px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            {/* 操作按钮 */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  if (confirm("确定要重置为默认提示词吗？")) {
+                    setUserPrompts(prev => ({
+                      ...prev,
+                      [activeTab]: ""
+                    }));
+                  }
+                }}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#374151",
+                  color: "#e5e7eb",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer"
+                }}
+              >
+                重置为默认
+              </button>
+              <button
+                onClick={async () => {
+                  const success = await saveUserPrompts(userPrompts);
+                  if (success) {
+                    alert("提示词保存成功！");
+                    setShowSettings(false);
+                  } else {
+                    alert("提示词保存失败，请重试。");
+                  }
+                }}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#3b82f6",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer"
+                }}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer>
         <small>

@@ -8,8 +8,105 @@ from prompt_manager import get_prompt, PromptKeys
 from template_manager import get_template_manager
 from docx_generator import generate_patent_docx, validate_patent_template
 from conversation_db import get_conversation_db
+from user_prompt_manager import get_user_prompt_manager
 
 logger = logging.getLogger(__name__)
+
+# 简单提示词逻辑（直接嵌入，避免复杂依赖）
+def get_simple_prompt_engine():
+    """获取简单提示词引擎实例（内联实现）"""
+    try:
+        user_prompt_manager = get_user_prompt_manager()
+
+        class SimplePromptEngine:
+            def __init__(self):
+                self.user_prompt_manager = user_prompt_manager
+                self.logger = logger
+
+                # 加载默认提示词
+                self._default_writer_prompt = """你现在扮演一名资深的中国发明专利撰写专家。
+
+任务：基于给定的技术背景和创新点，撰写一份结构完整、符合中国专利法和实务规范的发明专利草案。
+
+要求：
+1. 使用 Markdown 编写完整专利文档
+2. 包含标题、技术领域、背景技术、发明内容、具体实施方式、权利要求书、摘要等章节
+3. 语言客观、严谨，避免营销化和口语化表述
+4. 确保权利要求书有独立权利要求和若干从属权利要求
+
+请直接输出完整、可独立阅读的 Markdown 专利文档，不要额外附加解释说明。"""
+
+                self._default_reviewer_prompt = """你现在扮演一名资深专利代理人 / 合规审查专家。
+
+任务：对下面的专利草案进行严格审查，找出所有可能的合规风险、缺陷和可改进之处，并给出条理清晰的修改建议。
+
+审查重点：
+- 是否充分体现并保护核心创新点
+- 权利要求书是否具备新颖性、创造性和实用性
+- 是否存在模糊、主观或不清楚的表述
+- 技术描述是否准确、一致
+- 文档结构是否完整、格式是否规范
+
+请以 Markdown 输出评审结果，包含：
+1. 概览评语
+2. 问题清单（每条包括问题描述和修改建议）
+3. 总体风险评估
+
+不要重写专利全文，只给出评审和修改建议。"""
+
+                logger.info("SimplePromptEngine 初始化完成")
+
+            def get_writer_prompt(self, context, previous_draft=None, previous_review=None, iteration=1, total_iterations=1):
+                logger.info("=== 开始获取撰写者提示词 ===")
+
+                try:
+                    user_prompt = self.user_prompt_manager.get_user_prompt('writer')
+                    logger.info(f"用户撰写者提示词检查: 存在={bool(user_prompt)}")
+
+                    if user_prompt and user_prompt.strip():
+                        logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
+                        logger.info(f"用户提示词开头: {user_prompt[:100]}...")
+                        logger.info("✅ 使用用户自定义撰写者提示词（100%原样）")
+                        return user_prompt
+                    else:
+                        logger.info("用户未设置撰写者提示词，使用系统默认")
+                        return self._default_writer_prompt
+
+                except Exception as e:
+                    logger.error(f"检查用户撰写者提示词失败: {e}")
+                    return self._default_writer_prompt
+
+            def get_reviewer_prompt(self, context, current_draft, iteration=1, total_iterations=1):
+                logger.info("=== 开始获取审核者提示词 ===")
+
+                try:
+                    user_prompt = self.user_prompt_manager.get_user_prompt('reviewer')
+                    logger.info(f"用户审核者提示词检查: 存在={bool(user_prompt)}")
+
+                    if user_prompt and user_prompt.strip():
+                        logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
+                        logger.info(f"用户提示词开头: {user_prompt[:100]}...")
+                        logger.info("✅ 使用用户自定义审核者提示词（100%原样）")
+                        return user_prompt
+                    else:
+                        logger.info("用户未设置审核者提示词，使用系统默认")
+                        return self._default_reviewer_prompt
+
+                except Exception as e:
+                    logger.error(f"检查用户审核者提示词失败: {e}")
+                    return self._default_reviewer_prompt
+
+        return SimplePromptEngine()
+
+    except Exception as e:
+        logger.error(f"创建简单提示词引擎失败: {e}")
+        # 返回一个空的引擎对象
+        class EmptyPromptEngine:
+            def get_writer_prompt(self, *args, **kwargs):
+                return "默认撰写者提示词"
+            def get_reviewer_prompt(self, *args, **kwargs):
+                return "默认审核者提示词"
+        return EmptyPromptEngine()
 
 
 def build_writer_prompt(
@@ -51,16 +148,36 @@ def build_writer_prompt(
         else:
             logger.debug("没有上一轮评审 (首轮撰写)")
 
-        # 使用增强的提示词管理器获取配置化提示词
-        prompt = get_prompt(
-            PromptKeys.PATENT_WRITER,
-            context=context,
-            previous_draft=previous_draft,
-            previous_review=previous_review,
-            iteration=iteration,
-            total_iterations=total_iterations,
-            template_id=template_id
-        )
+        # 优先检查用户自定义提示词
+        user_prompt_manager = get_user_prompt_manager()
+        user_custom_prompt = user_prompt_manager.get_user_prompt('writer')
+
+        if user_custom_prompt and user_custom_prompt.strip():
+            logger.info("使用用户自定义撰写者提示词")
+            logger.debug(f"用户自定义提示词长度: {len(user_custom_prompt)} 字符")
+
+            # 使用用户自定义提示词，启用严格模式
+            prompt = _build_prompt_from_template(
+                user_custom_prompt,
+                context=context,
+                previous_draft=previous_draft,
+                previous_review=previous_review,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                strict_mode=True
+            )
+        else:
+            logger.debug("用户未设置自定义撰写者提示词，使用系统默认")
+            # 使用增强的提示词管理器获取配置化提示词
+            prompt = get_prompt(
+                PromptKeys.PATENT_WRITER,
+                context=context,
+                previous_draft=previous_draft,
+                previous_review=previous_review,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                template_id=template_id
+            )
 
         # 检查提示词是否包含历史内容
         if iteration > 1:
@@ -152,25 +269,42 @@ def build_reviewer_prompt(
         构建完成的提示词字符串
     """
     try:
-        # 构建模板信息文本（保持向后兼容）
-        template_info_text = ""
-        if template_info:
-            template_info_text = f"\n【模板信息】\n使用模板: {template_info.get('name', '未知模板')}\n模板ID: {template_info.get('id', '未知')}\n"
-
         # 调试日志：记录评审请求的模板ID
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"构建评审提示词，模板ID: {template_id}")
 
-        # 使用增强的提示词管理器获取配置化提示词
-        prompt = get_prompt(
-            PromptKeys.PATENT_REVIEWER,
-            context=context + template_info_text,
-            current_draft=current_draft,
-            iteration=iteration,
-            total_iterations=total_iterations,
-            template_id=template_id
-        )
+        # 优先检查用户自定义提示词
+        user_prompt_manager = get_user_prompt_manager()
+        user_custom_prompt = user_prompt_manager.get_user_prompt('reviewer')
+
+        if user_custom_prompt and user_custom_prompt.strip():
+            logger.info("使用用户自定义审核者提示词")
+            logger.debug(f"用户自定义提示词长度: {len(user_custom_prompt)} 字符")
+
+            # 使用用户自定义提示词，启用严格模式
+            prompt = _build_prompt_from_template(
+                user_custom_prompt,
+                context=context,
+                current_draft=current_draft,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                strict_mode=True
+            )
+        else:
+            logger.debug("用户未设置自定义审核者提示词，使用系统默认")
+            # 构建模板信息文本（保持向后兼容）
+            template_info_text = ""
+            if template_info:
+                template_info_text = f"\n【模板信息】\n使用模板: {template_info.get('name', '未知模板')}\n模板ID: {template_info.get('id', '未知')}\n"
+
+            # 使用增强的提示词管理器获取配置化提示词
+            prompt = get_prompt(
+                PromptKeys.PATENT_REVIEWER,
+                context=context + template_info_text,
+                current_draft=current_draft,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                template_id=template_id
+            )
 
         # 调试日志：记录提示词生成是否成功
         logger.debug(f"评审提示词生成成功，模板ID: {template_id}")
@@ -335,14 +469,14 @@ def run_patent_iteration(
 
             update_progress(base_progress, f"第 {i}/{total} 轮：准备撰写阶段")
 
-            # 撰写阶段
-            writer_prompt = build_writer_prompt(
+            # 撰写阶段 - 使用新的简单提示词引擎
+            simple_prompt_engine = get_simple_prompt_engine()
+            writer_prompt = simple_prompt_engine.get_writer_prompt(
                 context=context,
                 previous_draft=draft,
                 previous_review=review,
                 iteration=i,
-                total_iterations=total,
-                template_id=selected_template_id
+                total_iterations=total
             )
             update_progress(writer_progress - 5, f"第 {i}/{total} 轮：调用 LLM 撰写专利")
             draft = call_llm(writer_prompt)
@@ -361,14 +495,12 @@ def run_patent_iteration(
                 except Exception as e:
                     logger.warning(f"记录撰写者对话失败: {e}")
 
-            # 评审阶段
-            reviewer_prompt = build_reviewer_prompt(
+            # 评审阶段 - 使用新的简单提示词引擎
+            reviewer_prompt = simple_prompt_engine.get_reviewer_prompt(
                 context=context,
                 current_draft=draft,
                 iteration=i,
-                total_iterations=total,
-                template_info=template_info,
-                template_id=selected_template_id
+                total_iterations=total
             )
             update_progress(reviewer_progress - 5, f"第 {i}/{total} 轮：调用 LLM 进行评审")
             review = call_llm(reviewer_prompt)
@@ -491,4 +623,201 @@ def run_patent_iteration(
         result["task_id"] = task_id
 
     return result
+
+
+def _build_prompt_from_template(
+    template: str,
+    context: str,
+    previous_draft: Optional[str] = None,
+    previous_review: Optional[str] = None,
+    iteration: int = 1,
+    total_iterations: int = 1,
+    strict_mode: bool = False
+) -> str:
+    """
+    从模板构建提示词，支持变量替换
+
+    Args:
+        template: 提示词模板
+        context: 技术背景和创新点上下文
+        previous_draft: 上一版专利草案
+        previous_review: 上一轮评审意见
+        iteration: 当前迭代轮次
+        total_iterations: 总迭代轮次
+        strict_mode: 严格执行模式，为True时严格按照用户输入执行，不添加任何额外内容
+
+    Returns:
+        构建完成的提示词字符串
+    """
+    try:
+        prompt = template
+
+        # 严格执行模式：直接返回用户输入，不做任何修改
+        if strict_mode:
+            logger.info(f"严格执行模式已启用：直接使用用户输入的提示词")
+            logger.info(f"严格模式提示词长度: {len(prompt)} 字符")
+            logger.info(f"严格模式提示词开头: {prompt[:100]}...")
+            logger.info(f"严格模式提示词结尾: {prompt[-50:] if len(prompt) > 50 else prompt}")
+            return prompt
+
+        # 正常模式：进行变量替换和内容增强
+        # 替换基本变量
+        replacements = {
+            "{{context}}": context or "",
+            "{{previous_draft}}": previous_draft or "",
+            "{{previous_review}}": previous_review or "",
+            "{{iteration}}": str(iteration),
+            "{{total_iterations}}": str(total_iterations),
+            "{{current_iteration}}": str(iteration),
+            "{{total_rounds}}": str(total_iterations)
+        }
+
+        # 执行替换
+        for placeholder, value in replacements.items():
+            prompt = prompt.replace(placeholder, value)
+
+        # 添加历史内容章节（如果需要且用户模板中包含相应占位符）
+        if previous_draft and "{{tech_context}}" in prompt:
+            # 如果模板中有技术上下文占位符，替换为用户提供的上下文
+            prompt = prompt.replace("{{tech_context}}", context or "")
+
+        # 添加迭代信息
+        if "这是第" not in prompt and f"第 {iteration}/{total_iterations} 轮" not in prompt:
+            prompt += f"\n\n这是第 {iteration}/{total_iterations} 轮"
+
+        logger.debug(f"模板变量替换完成，提示词长度: {len(prompt)} 字符")
+        return prompt
+
+    except Exception as e:
+        logger.error(f"模板变量替换失败: {e}")
+        # 如果替换失败，返回原始模板
+        return template
+
+
+def get_effective_writer_prompt(
+    context: str,
+    previous_draft: Optional[str],
+    previous_review: Optional[str],
+    iteration: int,
+    total_iterations: int,
+    template_id: Optional[str] = None
+) -> str:
+    """
+    获取有效的撰写者提示词，优先使用用户自定义
+
+    Args:
+        context: 技术背景和创新点上下文
+        previous_draft: 上一版专利草案
+        previous_review: 上一轮评审意见
+        iteration: 当前迭代轮次
+        total_iterations: 总迭代轮次
+        template_id: 模板ID
+
+    Returns:
+        有效的撰写者提示词
+    """
+    try:
+        # 优先检查用户自定义提示词
+        user_prompt_manager = get_user_prompt_manager()
+        user_custom_prompt = user_prompt_manager.get_user_prompt('writer')
+
+        # 添加详细的调试日志
+        logger.info(f"检查用户自定义撰写者提示词...")
+        logger.info(f"用户提示词存在: {bool(user_custom_prompt)}")
+        if user_custom_prompt:
+            logger.info(f"用户提示词长度: {len(user_custom_prompt)} 字符")
+            logger.info(f"用户提示词开头: {user_custom_prompt[:50]}...")
+            logger.info(f"用户提示词是否为空: {not user_custom_prompt.strip()}")
+
+        if user_custom_prompt and user_custom_prompt.strip():
+            logger.info("使用用户自定义撰写者提示词（严格模式）")
+            return _build_prompt_from_template(
+                user_custom_prompt,
+                context=context,
+                previous_draft=previous_draft,
+                previous_review=previous_review,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                strict_mode=True
+            )
+        else:
+            logger.debug("用户未设置自定义撰写者提示词，使用系统默认")
+            return get_prompt(
+                PromptKeys.PATENT_WRITER,
+                context=context,
+                previous_draft=previous_draft,
+                previous_review=previous_review,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                template_id=template_id
+            )
+
+    except Exception as e:
+        logger.error(f"获取撰写者提示词失败: {e}")
+        # 回退到硬编码提示词
+        return _build_writer_prompt_fallback(
+            context, previous_draft, previous_review, iteration, total_iterations
+        )
+
+
+def get_effective_reviewer_prompt(
+    context: str,
+    current_draft: str,
+    iteration: int,
+    total_iterations: int,
+    template_id: Optional[str] = None
+) -> str:
+    """
+    获取有效的审核者提示词，优先使用用户自定义
+
+    Args:
+        context: 技术背景和创新点上下文
+        current_draft: 当前专利草案
+        iteration: 当前迭代轮次
+        total_iterations: 总迭代轮次
+        template_id: 模板ID
+
+    Returns:
+        有效的审核者提示词
+    """
+    try:
+        # 优先检查用户自定义提示词
+        user_prompt_manager = get_user_prompt_manager()
+        user_custom_prompt = user_prompt_manager.get_user_prompt('reviewer')
+
+        # 添加详细的调试日志
+        logger.info(f"检查用户自定义审核者提示词...")
+        logger.info(f"用户提示词存在: {bool(user_custom_prompt)}")
+        if user_custom_prompt:
+            logger.info(f"用户提示词长度: {len(user_custom_prompt)} 字符")
+            logger.info(f"用户提示词开头: {user_custom_prompt[:50]}...")
+            logger.info(f"用户提示词是否为空: {not user_custom_prompt.strip()}")
+
+        if user_custom_prompt and user_custom_prompt.strip():
+            logger.info("使用用户自定义审核者提示词（严格模式）")
+            return _build_prompt_from_template(
+                user_custom_prompt,
+                context=context,
+                current_draft=current_draft,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                strict_mode=True
+            )
+        else:
+            logger.debug("用户未设置自定义审核者提示词，使用系统默认")
+            return get_prompt(
+                PromptKeys.PATENT_REVIEWER,
+                context=context,
+                current_draft=current_draft,
+                iteration=iteration,
+                total_iterations=total_iterations,
+                template_id=template_id
+            )
+
+    except Exception as e:
+        logger.error(f"获取审核者提示词失败: {e}")
+        # 回退到硬编码提示词
+        return _build_reviewer_prompt_fallback(
+            context, current_draft, iteration, total_iterations
+        )
 

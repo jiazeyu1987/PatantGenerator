@@ -12,6 +12,7 @@ from config import get_config
 from chat_log_api import register_chat_log_api
 from template_api import register_template_api
 from conversation_api import register_conversation_routes
+from user_prompt_api import register_user_prompt_routes
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # For production, serve the built React app from frontend/dist
@@ -35,6 +36,108 @@ def create_app() -> Flask:
 
     # 注册对话历史 API
     register_conversation_routes(app)
+
+    # 注册用户提示词 API
+    register_user_prompt_routes(app)
+
+    # 添加调试API
+    @app.route("/api/debug/prompts", methods=["GET"])
+    def debug_prompts():
+        """调试提示词使用情况 - 使用内联简单提示词引擎"""
+        try:
+            from patent_workflow import get_simple_prompt_engine
+
+            # 创建简单提示词引擎实例
+            simple_prompt_engine = get_simple_prompt_engine()
+
+            # 获取用户提示词
+            user_prompt_manager = simple_prompt_engine.user_prompt_manager
+            writer_prompt = user_prompt_manager.get_user_prompt('writer')
+            reviewer_prompt = user_prompt_manager.get_user_prompt('reviewer')
+
+            debug_info = {
+                "engine_status": "内联SimplePromptEngine 已初始化",
+                "user_prompts": {
+                    "writer": {
+                        "exists": bool(writer_prompt),
+                        "length": len(writer_prompt) if writer_prompt else 0,
+                        "content_preview": writer_prompt[:100] + "..." if writer_prompt else None,
+                        "is_empty": not writer_prompt.strip() if writer_prompt else True,
+                        "starts_with_hash": writer_prompt.startswith("##") if writer_prompt else False
+                    },
+                    "reviewer": {
+                        "exists": bool(reviewer_prompt),
+                        "length": len(reviewer_prompt) if reviewer_prompt else 0,
+                        "content_preview": reviewer_prompt[:100] + "..." if reviewer_prompt else None,
+                        "is_empty": not reviewer_prompt.strip() if reviewer_prompt else True,
+                        "starts_with_hash": reviewer_prompt.startswith("##") if reviewer_prompt else False
+                    }
+                },
+                "default_prompts": {
+                    "writer_loaded": bool(simple_prompt_engine._default_writer_prompt),
+                    "writer_length": len(simple_prompt_engine._default_writer_prompt) if simple_prompt_engine._default_writer_prompt else 0,
+                    "reviewer_loaded": bool(simple_prompt_engine._default_reviewer_prompt),
+                    "reviewer_length": len(simple_prompt_engine._default_reviewer_prompt) if simple_prompt_engine._default_reviewer_prompt else 0
+                }
+            }
+
+            return jsonify({
+                "success": True,
+                "data": debug_info
+            })
+
+        except Exception as e:
+            logger.error(f"调试提示词失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 500
+
+    @app.route("/api/debug/test-prompts", methods=["GET"])
+    def test_prompts():
+        """测试提示词获取功能"""
+        try:
+            from patent_workflow import get_simple_prompt_engine
+
+            # 创建简单提示词引擎实例
+            simple_prompt_engine = get_simple_prompt_engine()
+
+            # 模拟测试提示词获取
+            test_context = "这是一个测试技术背景"
+
+            writer_prompt = simple_prompt_engine.get_writer_prompt(
+                context=test_context, iteration=1, total_iterations=3
+            )
+
+            reviewer_prompt = simple_prompt_engine.get_reviewer_prompt(
+                context=test_context, current_draft="测试专利草案", iteration=1, total_iterations=3
+            )
+
+            test_results = {
+                "test_context": test_context,
+                "writer_prompt": {
+                    "length": len(writer_prompt),
+                    "preview": writer_prompt[:200] + "...",
+                    "is_user_custom": writer_prompt.startswith("##") if writer_prompt else False
+                },
+                "reviewer_prompt": {
+                    "length": len(reviewer_prompt),
+                    "preview": reviewer_prompt[:200] + "...",
+                    "is_user_custom": reviewer_prompt.startswith("##") if reviewer_prompt else False
+                }
+            }
+
+            return jsonify({
+                "success": True,
+                "data": test_results
+            })
+
+        except Exception as e:
+            logger.error(f"测试提示词失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 500
 
     return app
 
