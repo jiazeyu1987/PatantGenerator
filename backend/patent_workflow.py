@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -6,6 +7,9 @@ from llm_client import call_llm
 from prompt_manager import get_prompt, PromptKeys
 from template_manager import get_template_manager
 from docx_generator import generate_patent_docx, validate_patent_template
+from conversation_db import get_conversation_db
+
+logger = logging.getLogger(__name__)
 
 
 def build_writer_prompt(
@@ -31,6 +35,22 @@ def build_writer_prompt(
         构建完成的提示词字符串
     """
     try:
+        # 添加调试日志记录历史数据
+        logger.info(f"构建撰写者提示词 - 第 {iteration}/{total_iterations} 轮")
+        logger.debug(f"模板ID: {template_id}")
+
+        if previous_draft:
+            logger.debug(f"上一版草案长度: {len(previous_draft)} 字符")
+            logger.debug(f"上一版草案前100字符: {previous_draft[:100]}...")
+        else:
+            logger.debug("没有上一版草案 (首轮撰写)")
+
+        if previous_review:
+            logger.debug(f"上一轮评审长度: {len(previous_review)} 字符")
+            logger.debug(f"上一轮评审前100字符: {previous_review[:100]}...")
+        else:
+            logger.debug("没有上一轮评审 (首轮撰写)")
+
         # 使用增强的提示词管理器获取配置化提示词
         prompt = get_prompt(
             PromptKeys.PATENT_WRITER,
@@ -41,6 +61,16 @@ def build_writer_prompt(
             total_iterations=total_iterations,
             template_id=template_id
         )
+
+        # 检查提示词是否包含历史内容
+        if iteration > 1:
+            has_draft_section = "【上一版专利草案】" in prompt
+            has_review_section = "【合规评审与问题清单】" in prompt
+            logger.info(f"提示词包含历史内容检查:")
+            logger.info(f"  包含上一版草案: {has_draft_section}")
+            logger.info(f"  包含评审意见: {has_review_section}")
+            logger.debug(f"提示词总长度: {len(prompt)} 字符")
+
         return prompt
     except Exception as e:
         # 如果配置化提示词失败，回退到原始硬编码提示词
@@ -68,11 +98,7 @@ def _build_writer_prompt_fallback(
     parts.append("整体要求：")
     parts.append("- 使用 Markdown 编写完整专利文档；")
     parts.append("- 章节建议包括但不限于：标题、技术领域、背景技术、发明内容、附图说明、具体实施方式、权利要求书、摘要；")
-    parts.append("- 所有图示必须使用 mermaid 语法的代码块，例如：")
-    parts.append("```mermaid")
-    parts.append("graph TD")
-    parts.append("  A[模块A] --> B[模块B]")
-    parts.append("```")
+    parts.append("- 如需要图表，使用简洁的描述性语言说明图表内容和结构关系；")
     parts.append("- 语言应尽可能客观、严谨、避免营销化和口语化表述；")
     parts.append("- 权利要求书要有独立权利要求和若干从属权利要求，并尽量覆盖主要创新点。")
     parts.append("")
@@ -178,12 +204,10 @@ def _build_reviewer_prompt_fallback(
     parts.append("- 权利要求书是否具备新颖性、创造性和实用性，是否存在过窄或过宽的问题；")
     parts.append("- 是否存在模糊、主观或不清楚的表述；")
     parts.append("- 是否有与背景技术、实施例不一致的地方；")
-    parts.append("- mermaid 图是否与文字描述一致，是否存在遗漏或不清晰的环节；")
+    parts.append("- 图表描述是否清晰，与文字描述是否一致；")
     parts.append("- 是否有明显的专利法或实务上的违反之处；")
 
-    # 添加模板格式检查
-    if template_info:
-        parts.append(f"- 文档格式是否符合选定模板 '{template_info.get('name', '未知模板')}' 的规范和要求。")
+    parts.append("- 文档结构是否完整，章节是否清晰；")
     parts.append("")
     parts.append(f"这是第 {iteration}/{total_iterations} 轮审查。")
     parts.append("")
@@ -244,6 +268,20 @@ def run_patent_iteration(
     selected_template_id: Optional[str] = template_id
     template_info: Optional[Dict[str, Any]] = None
     template_analysis: Optional[Dict[str, Any]] = None
+
+    # 创建数据库记录
+    try:
+        conversation_db = get_conversation_db()
+        task_id = conversation_db.create_task(
+            title=f"专利生成任务 - {base_name or '未命名'}",
+            context=context,
+            iterations=total,
+            base_name=base_name
+        )
+        logger.info(f"创建专利生成任务: {task_id}")
+    except Exception as e:
+        logger.warning(f"创建数据库任务失败，继续执行: {e}")
+        task_id = None
 
     def update_progress(progress: int, message: str) -> None:
         """更新进度"""
@@ -310,6 +348,19 @@ def run_patent_iteration(
             draft = call_llm(writer_prompt)
             update_progress(writer_progress, f"第 {i}/{total} 轮：专利撰写完成")
 
+            # 记录撰写者对话到数据库
+            if task_id and conversation_db:
+                try:
+                    conversation_db.add_conversation_round(
+                        task_id=task_id,
+                        round_number=i,
+                        role='writer',
+                        prompt=writer_prompt,
+                        response=draft
+                    )
+                except Exception as e:
+                    logger.warning(f"记录撰写者对话失败: {e}")
+
             # 评审阶段
             reviewer_prompt = build_reviewer_prompt(
                 context=context,
@@ -322,6 +373,19 @@ def run_patent_iteration(
             update_progress(reviewer_progress - 5, f"第 {i}/{total} 轮：调用 LLM 进行评审")
             review = call_llm(reviewer_prompt)
             update_progress(reviewer_progress, f"第 {i}/{total} 轮：评审完成")
+
+            # 记录审批者对话到数据库
+            if task_id and conversation_db:
+                try:
+                    conversation_db.add_conversation_round(
+                        task_id=task_id,
+                        round_number=i,
+                        role='reviewer',
+                        prompt=reviewer_prompt,
+                        response=review
+                    )
+                except Exception as e:
+                    logger.warning(f"记录审批者对话失败: {e}")
 
     except Exception as e:
         update_progress(95, f"处理过程中出现错误: {str(e)}")
@@ -402,6 +466,13 @@ def run_patent_iteration(
         update_progress(95, f"文件保存失败: {str(e)}")
         raise
 
+    # 更新任务状态为完成
+    if task_id and conversation_db:
+        try:
+            conversation_db.update_task_status(task_id, "completed")
+        except Exception as e:
+            logger.warning(f"更新任务状态失败: {e}")
+
     result = {
         "output_path": output_path,
         "final_markdown": final_markdown,
@@ -414,6 +485,10 @@ def run_patent_iteration(
         result["docx_path"] = docx_path
         result["template_used"] = True
         result["template_id"] = selected_template_id
+
+    # 添加任务ID用于前端显示对话历史
+    if task_id:
+        result["task_id"] = task_id
 
     return result
 

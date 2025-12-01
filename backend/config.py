@@ -34,7 +34,7 @@ class LLMConfig:
     model: str = "claude-3-5-sonnet-20241022"
     max_tokens: int = 8192
     timeout: int = 300            # 5分钟
-    max_input_length: int = 100000  # 100KB
+    max_input_length: int = 200000  # 200KB
     max_output_length: int = 2000000  # 2MB
     retry_attempts: int = 3
     retry_delay: int = 5          # 5秒

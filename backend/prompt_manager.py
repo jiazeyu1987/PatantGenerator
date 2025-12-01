@@ -67,10 +67,8 @@ class PromptManager:
         self._load_all_prompts()
 
     def _register_dynamic_generators(self):
-        """注册动态内容生成器 - 简化版本，只保留模板标题信息"""
-        self._dynamic_generators.update({
-            'template_title_only': self._generate_template_title_only
-        })
+        """移除动态内容生成器 - 不再支持模板相关功能"""
+        self._dynamic_generators = {}
 
     def _get_template_manager(self):
         """获取模板管理器实例（懒加载）"""
@@ -196,69 +194,15 @@ class PromptManager:
 
     def _get_template_analysis_for_prompt(self, template_id: str) -> Dict[str, Any]:
         """
-        获取用于提示词的模板分析结果
-
-        Args:
-            template_id: 模板ID
-
-        Returns:
-            Dict: 模板分析摘要
+        已移除模板分析功能
         """
-        try:
-            template_manager = self._get_template_manager()
-            analysis = template_manager.get_template_analysis(template_id)
-            if not analysis:
-                logger.warning(f"无法获取模板分析结果: {template_id}")
-                return {}
-
-            # 转换为适合提示词使用的格式
-            return {
-                'complexity_score': round(analysis.intelligence.complexity_score, 3),
-                'quality_score': round(analysis.intelligence.quality_score, 3),
-                'completeness_score': round(analysis.intelligence.completeness_score, 3),
-                'template_type': analysis.intelligence.template_type,
-                'applicable_domains': analysis.intelligence.applicable_domains,
-                'suggestions': analysis.intelligence.suggestions[:3],  # 只取前3个建议
-                'section_count': analysis.structure.section_count,
-                'max_heading_level': analysis.structure.max_heading_level,
-                'placeholder_count': analysis.structure.placeholder_count,
-                'content_requirements': {
-                    'word_limits': analysis.content_requirements.word_limits,
-                    'style_guide': analysis.content_requirements.style_guide,
-                    'structure_requirements': analysis.content_requirements.structure_requirements
-                },
-                'formatting': {
-                    'font_requirements': analysis.formatting.font_requirements,
-                    'paragraph_styles': analysis.formatting.paragraph_styles,
-                    'alignment_rules': analysis.formatting.alignment_rules
-                },
-                'figure_requirements': {
-                    'formats': analysis.figure_requirements.formats,
-                    'numbering_rules': analysis.figure_requirements.numbering_rules,
-                    'caption_format': analysis.figure_requirements.caption_format
-                }
-            }
-
-        except Exception as e:
-            logger.error(f"获取模板分析结果失败 {template_id}: {e}")
-            return {}
+        logger.debug(f"模板分析功能已移除，模板ID: {template_id}")
+        return {}
 
     def _build_enhanced_prompt_from_config(self, config: Dict[str, Any], **kwargs) -> List[str]:
-        """根据配置构建增强的提示词，支持动态内容生成"""
-        parts = []
-
-        # 先使用原有的构建逻辑
-        parts.extend(self._build_prompt_from_config(config, **kwargs))
-
-        # 处理动态内容生成
-        dynamic_sections = config.get('dynamic_sections', {})
-        for section_name, section_config in dynamic_sections.items():
-            if self._should_include_section(section_config, **kwargs):
-                dynamic_content = self._generate_dynamic_content(section_name, section_config, **kwargs)
-                if dynamic_content:
-                    parts.append(dynamic_content)
-
-        return parts
+        """简化的提示词构建，移除动态内容生成"""
+        # 直接使用基础构建逻辑，不再支持模板相关功能
+        return self._build_prompt_from_config(config, **kwargs)
 
     def _should_include_section(self, section_config: Dict[str, Any], **kwargs) -> bool:
         """判断是否应该包含某个动态章节"""
@@ -559,26 +503,8 @@ class PromptManager:
         return '\n'.join(parts) if parts else ""
 
     def _generate_template_title_only(self, section_config: Dict[str, Any], **kwargs) -> str:
-        """生成简化的模板标题信息 - 只显示使用的模板名称"""
-        template_id = kwargs.get('template_id')
-
-        if not template_id:
-            return ""
-
-        try:
-            # 获取模板管理器
-            template_manager = self._get_template_manager()
-            template_info = template_manager.get_template_info(template_id)
-
-            if template_info:
-                template_name = template_info.get('name', '未知模板')
-                return f"使用模板: {template_name}"
-            else:
-                return f"使用模板ID: {template_id}"
-
-        except Exception as e:
-            logger.warning(f"获取模板信息失败: {e}")
-            return f"使用模板ID: {template_id}"
+        """模板功能已移除"""
+        return ""
 
     def _build_prompt_from_config(self, config: Dict[str, Any], **kwargs) -> List[str]:
         """根据配置构建提示词"""
@@ -638,17 +564,38 @@ class PromptManager:
 
             # 检查条件
             condition = section_config.get('condition')
-            if condition and condition not in kwargs or not kwargs.get(condition):
-                continue
+            if condition:
+                # 对于条件渲染，需要检查对应的变量是否有值
+                condition_value = kwargs.get(condition)
+                if not condition_value or (isinstance(condition_value, str) and condition_value.strip() == ""):
+                    logger.debug(f"跳过上下文章节 {section_key}，条件 {condition} 未满足: {condition_value}")
+                    continue
 
-            # 提取变量名
-            var_match = re.search(r'\{\{(\w+)\}\}', placeholder)
-            if var_match:
-                var_name = var_match.group(1)
-                if var_name in kwargs and kwargs[var_name]:
+            # 提取变量名并替换
+            var_matches = re.findall(r'\{\{(\w+)\}\}', placeholder)
+            if var_matches:
+                # 替换所有占位符
+                content = placeholder
+                for var_name in var_matches:
+                    if var_name in kwargs and kwargs[var_name]:
+                        content = content.replace('{{' + var_name + '}}', str(kwargs[var_name]))
+                    else:
+                        content = content.replace('{{' + var_name + '}}', '')
+
+                # 如果替换后还有非空内容，则添加此章节
+                if content.strip():
                     parts.append(section_title)
-                    parts.append(str(kwargs[var_name]))
+                    parts.append(content)
                     parts.append("")
+                    logger.debug(f"添加上下文章节 {section_key}，长度: {len(content)}")
+                else:
+                    logger.debug(f"跳过上下文章节 {section_key}，内容为空")
+            else:
+                # 没有占位符，直接添加
+                parts.append(section_title)
+                parts.append(placeholder)
+                parts.append("")
+                logger.debug(f"添加静态上下文章节 {section_key}")
 
         # 添加最终指令
         if 'final_instruction' in prompt_config:

@@ -1,8 +1,169 @@
 import os
 import subprocess
 import shlex
+import re
+import logging
 from typing import Optional, List
 from config import get_config
+
+logger = logging.getLogger(__name__)
+
+
+def _compress_prompt_if_needed(prompt: str, max_length: int, compression_ratio: float = 0.7) -> Optional[str]:
+    """
+    智能压缩提示文本以适应长度限制
+
+    Args:
+        prompt: 原始提示文本
+        max_length: 最大允许长度
+        compression_ratio: 压缩目标比例（相对于最大长度）
+
+    Returns:
+        压缩后的提示文本，如果无法压缩则返回None
+    """
+    target_length = int(max_length * compression_ratio)
+
+    if len(prompt) <= target_length:
+        return prompt
+
+    logger.info(f"开始压缩提示文本，当前长度: {len(prompt)}, 目标长度: {target_length}")
+
+    try:
+        compressed_prompt = prompt
+
+        # 1. 压缩过长的历史专利草案
+        compressed_prompt = _compress_historical_content(compressed_prompt, "【上一版专利草案】", target_length)
+
+        # 2. 压缩过长的技术背景内容
+        compressed_prompt = _compress_historical_content(compressed_prompt, "【技术背景与创新点上下文】", target_length)
+
+        # 3. 压缩过长的评审意见
+        compressed_prompt = _compress_historical_content(compressed_prompt, "【合规评审与问题清单】", target_length)
+
+        # 4. 如果还是太长，进行通用压缩
+        if len(compressed_prompt) > target_length:
+            compressed_prompt = _generic_compress(compressed_prompt, target_length)
+
+        if len(compressed_prompt) <= max_length:
+            logger.info(f"提示文本压缩成功: {len(prompt)} -> {len(compressed_prompt)} 字符")
+            return compressed_prompt
+        else:
+            logger.warning(f"提示文本压缩后仍超限: {len(compressed_prompt)} > {max_length}")
+            return None
+
+    except Exception as e:
+        logger.error(f"提示文本压缩失败: {e}")
+        return None
+
+
+def _compress_historical_content(prompt: str, section_title: str, target_length: int) -> str:
+    """压缩特定的历文章节"""
+    if section_title not in prompt:
+        return prompt
+
+    # 找到章节的开始和结束位置
+    start_pos = prompt.find(section_title)
+    if start_pos == -1:
+        return prompt
+
+    # 找到下一个章节的开始位置
+    next_section_patterns = [
+        "【技术背景与创新点上下文】",
+        "【上一版专利草案】",
+        "【合规评审与问题清单】",
+        "【使用模板】",
+        "请直接输出完整"
+    ]
+
+    end_pos = len(prompt)  # 默认到文本末尾
+    for pattern in next_section_patterns:
+        if pattern != section_title:  # 避免找到自己
+            pos = prompt.find(pattern, start_pos + len(section_title))
+            if pos != -1 and pos < end_pos:
+                end_pos = pos
+
+    # 提取章节内容
+    section_content = prompt[start_pos:end_pos]
+
+    # 如果章节内容不是特别长，保留原样
+    if len(section_content) <= 5000:
+        return prompt
+
+    # 智能摘要：保留开头和结尾，中间用省略号
+    header_lines = []
+    content_lines = []
+    footer_lines = []
+
+    lines = section_content.split('\n')
+    in_header = True
+    in_content = False
+    in_footer = False
+
+    for i, line in enumerate(lines):
+        if line.strip().startswith('##') or line.strip().startswith('#'):
+            if in_content:
+                in_footer = True
+                in_content = False
+                in_header = False
+            elif in_header:
+                in_content = True
+
+        if in_header and len(header_lines) < 10:
+            header_lines.append(line)
+        elif in_footer and len(footer_lines) < 5:
+            footer_lines.append(line)
+        elif in_content and len(content_lines) < 20:  # 保留部分内容行
+            content_lines.append(line)
+
+    # 构建压缩后的章节内容
+    compressed_section = '\n'.join(header_lines)
+    if content_lines:
+        compressed_section += '\n...\n' + '\n'.join(content_lines[:15])
+    if footer_lines:
+        compressed_section += '\n...\n' + '\n'.join(footer_lines)
+
+    # 如果压缩后还是很长，进一步简化
+    if len(compressed_section) > 3000:
+        compressed_section = '\n'.join(header_lines[:5]) + '\n...\n[详细内容已压缩，保留核心要点]\n...'
+
+    # 替换原章节
+    new_prompt = prompt[:start_pos] + compressed_section + prompt[end_pos:]
+
+    logger.debug(f"章节 {section_title} 压缩: {len(section_content)} -> {len(compressed_section)} 字符")
+    return new_prompt
+
+
+def _generic_compress(prompt: str, target_length: int) -> str:
+    """通用文本压缩方法"""
+    lines = prompt.split('\n')
+    compressed_lines = []
+    current_length = 0
+
+    for line in lines:
+        # 优先保留重要的行（标题、指令等）
+        if (line.startswith('你现在扮演') or
+            line.startswith('这是第') or
+            line.startswith('请直接输出') or
+            line.startswith('##') or
+            line.startswith('#') or
+            len(line.strip()) < 50):  # 短行通常是重要信息
+
+            if current_length + len(line) + 1 <= target_length:
+                compressed_lines.append(line)
+                current_length += len(line) + 1
+        else:
+            # 普通内容行，选择性保留
+            if current_length + len(line) + 1 <= target_length * 0.8:
+                compressed_lines.append(line)
+                current_length += len(line) + 1
+
+    compressed_prompt = '\n'.join(compressed_lines)
+
+    if len(compressed_prompt) > target_length:
+        # 最后截断
+        compressed_prompt = compressed_prompt[:target_length-10] + '...\n[内容已截断]'
+
+    return compressed_prompt
 
 
 def validate_command(cmd: str) -> List[str]:
@@ -72,7 +233,18 @@ def call_llm_with_sdk(prompt: str) -> str:
         raise ValueError("提示必须是字符串类型")
 
     if len(prompt) > config.llm.max_input_length:
-        raise ValueError(f"提示文本长度超过限制 ({config.llm.max_input_length} 字符)")
+        logger.warning(f"提示文本长度 {len(prompt)} 超过限制 ({config.llm.max_input_length} 字符)")
+
+        # 尝试智能压缩
+        compressed_prompt = _compress_prompt_if_needed(prompt, config.llm.max_input_length)
+        if compressed_prompt:
+            logger.info(f"提示文本已从 {len(prompt)} 压缩至 {len(compressed_prompt)} 字符")
+            prompt = compressed_prompt
+        else:
+            raise ValueError(f"提示文本长度超过限制且无法压缩 ({len(prompt)} > {config.llm.max_input_length} 字符)")
+
+    # 记录提示词长度信息
+    logger.info(f"提示词长度: {len(prompt)} 字符")
 
     # 导入聊天日志记录器
     from chat_logger import get_chat_logger
@@ -244,7 +416,18 @@ def call_llm_with_cli(prompt: str) -> str:
         raise ValueError("提示必须是字符串类型")
 
     if len(prompt) > config.llm.max_input_length:
-        raise ValueError(f"提示文本长度超过限制 ({config.llm.max_input_length} 字符)")
+        logger.warning(f"提示文本长度 {len(prompt)} 超过限制 ({config.llm.max_input_length} 字符)")
+
+        # 尝试智能压缩
+        compressed_prompt = _compress_prompt_if_needed(prompt, config.llm.max_input_length)
+        if compressed_prompt:
+            logger.info(f"提示文本已从 {len(prompt)} 压缩至 {len(compressed_prompt)} 字符")
+            prompt = compressed_prompt
+        else:
+            raise ValueError(f"提示文本长度超过限制且无法压缩 ({len(prompt)} > {config.llm.max_input_length} 字符)")
+
+    # 记录提示词长度信息
+    logger.info(f"提示词长度: {len(prompt)} 字符")
 
     # 导入聊天日志记录器
     from chat_logger import get_chat_logger

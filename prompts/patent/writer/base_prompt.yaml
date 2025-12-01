@@ -19,22 +19,13 @@ prompt:
   requirements:
     - "使用 Markdown 编写完整专利文档；"
     - "章节建议包括但不限于：标题、技术领域、背景技术、发明内容、附图说明、具体实施方式、权利要求书、摘要；"
-    - "所有图示必须使用 mermaid 语法的代码块，例如："
-    - "```mermaid"
-    - "graph TD"
-    - "  A[模块A] --> B[模块B]"
-    - "```"
+    - "如需要图表，使用简洁的描述性语言说明图表内容和结构关系；"
     - "语言应尽可能客观、严谨、避免营销化和口语化表述；"
     - "权利要求书要有独立权利要求和若干从属权利要求，并尽量覆盖主要创新点。"
 
   final_instruction: "请直接输出完整、可独立阅读的 Markdown 专利文档，不要额外附加解释说明。"
 
-# 简化的模板章节配置 - 只保留模板标题信息
-dynamic_sections:
-  template_info:
-    title: "【使用模板】"
-    generator: "template_title_only"
-    condition: "has_template_id"
+# 移除模板相关章节配置
 
 # 迭代阶段配置
 iteration_phases:

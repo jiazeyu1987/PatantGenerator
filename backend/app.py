@@ -11,6 +11,7 @@ from task_manager import get_task_manager, TaskStatus
 from config import get_config
 from chat_log_api import register_chat_log_api
 from template_api import register_template_api
+from conversation_api import register_conversation_routes
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # For production, serve the built React app from frontend/dist
@@ -31,6 +32,9 @@ def create_app() -> Flask:
 
     # 注册模板管理 API
     register_template_api(app)
+
+    # 注册对话历史 API
+    register_conversation_routes(app)
 
     return app
 

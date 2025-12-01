@@ -41,6 +41,85 @@ class FileAnalysisResult:
         self.size = len(content) if content else 0
 
 
+def _extract_technical_concepts(code_content: str, file_path: str) -> str:
+    """
+    从代码内容中提取技术概念，转换为适合专利申请的描述
+
+    Args:
+        code_content: 代码内容
+        file_path: 文件路径
+
+    Returns:
+        技术概念描述
+    """
+    try:
+        lines = code_content.split('\n')
+        concepts = []
+
+        # 分析文件类型
+        _, ext = os.path.splitext(file_path)
+        file_type = "程序文件"
+        if ext == '.py':
+            file_type = "Python程序"
+        elif ext in ['.js', '.jsx']:
+            file_type = "JavaScript程序"
+        elif ext in ['.ts', '.tsx']:
+            file_type = "TypeScript程序"
+        elif ext in ['.java']:
+            file_type = "Java程序"
+        elif ext in ['.cpp', '.c']:
+            file_type = "C/C++程序"
+        elif ext in ['.go']:
+            file_type = "Go程序"
+        elif ext in ['.rs']:
+            file_type = "Rust程序"
+
+        concepts.append(f"技术组件类型: {file_type}")
+
+        # 提取类/函数定义（简化版本）
+        for line in lines[:20]:  # 只分析前20行，避免过多细节
+            line = line.strip()
+
+            # Python类和函数
+            if line.startswith('class '):
+                class_name = line.replace('class ', '').split('(')[0].split(':')[0].strip()
+                if class_name:
+                    concepts.append(f"核心组件: {class_name}")
+            elif line.startswith('def '):
+                func_name = line.replace('def ', '').split('(')[0].strip()
+                if func_name and not func_name.startswith('_'):
+                    concepts.append(f"功能模块: {func_name}")
+
+            # JavaScript函数和类
+            elif 'function ' in line and line.startswith('function'):
+                func_name = line.replace('function ', '').split('(')[0].strip()
+                if func_name:
+                    concepts.append(f"功能模块: {func_name}")
+            elif 'class ' in line and 'extends' in line:
+                class_name = line.strip().split('class ')[1].split(' ')[0]
+                if class_name:
+                    concepts.append(f"核心组件: {class_name}")
+
+            # 通用识别 - 检查常见的技术关键词
+            elif any(keyword in line.lower() for keyword in ['api', 'interface', 'service', 'controller', 'handler']):
+                if 'api' in line.lower():
+                    concepts.append("API接口组件")
+                elif 'service' in line.lower():
+                    concepts.append("服务组件")
+                elif 'controller' in line.lower() or 'handler' in line.lower():
+                    concepts.append("控制器组件")
+
+        # 如果没有提取到具体概念，提供通用描述
+        if len(concepts) <= 1:
+            concepts.append(f"技术实现模块")
+
+        return "、".join(concepts[:3]) + "等"
+
+    except Exception as e:
+        logger.warning(f"技术概念提取失败: {e}")
+        return f"程序化技术实现模块"
+
+
 def is_code_file(path: str) -> bool:
     """检查是否为代码文件"""
     try:
@@ -277,10 +356,10 @@ def build_code_innovation_context_streaming(root_dir: str, progress_callback: Op
                     yield "---"
                     yield f"FILE: {result.rel_path}"
                     yield ""
-                    yield "SNIPPET:"
-                    yield "```"
-                    yield result.content
-                    yield "```"
+                    yield "TECHNICAL_CONCEPT:"
+                    # 将代码内容转换为概念性描述，避免直接输出代码
+                    concept_description = _extract_technical_concepts(result.content, result.rel_path)
+                    yield concept_description
                     yield ""
                 else:
                     # 文件读取失败

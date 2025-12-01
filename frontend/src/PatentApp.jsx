@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import TemplateSelector from "./TemplateSelector";
+import ConversationViewer from "./ConversationViewer";
 
 function PatentApp() {
   const [mode, setMode] = useState("code");
@@ -14,6 +15,8 @@ function PatentApp() {
   const [useAsync, setUseAsync] = useState(true); // 默认使用异步模式
   const [currentTask, setCurrentTask] = useState(null);
   const [progress, setProgress] = useState(0);
+  const [currentTaskId, setCurrentTaskId] = useState(null); // 用于对话查看器
+  const [showConversation, setShowConversation] = useState(false); // 控制对话查看器显示
 
   // 轮询任务状态
   const pollTaskStatus = async (taskId) => {
@@ -74,6 +77,13 @@ function PatentApp() {
 
           setResultText(resultText);
           setLoading(false);
+
+          // 保存task_id并显示对话查看器
+          if (data.result && data.result.task_id) {
+            setCurrentTaskId(data.result.task_id);
+            setShowConversation(true);
+          }
+
           return true;
         } else if (data.status === "failed") {
           throw new Error(data.error || "任务执行失败");
@@ -503,6 +513,12 @@ function PatentApp() {
             )}
           </div>
         </section>
+
+        {/* 对话查看器 */}
+        <ConversationViewer
+          taskId={currentTaskId}
+          visible={showConversation}
+        />
       </main>
 
       <footer>
