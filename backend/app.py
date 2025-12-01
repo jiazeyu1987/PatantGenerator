@@ -104,17 +104,33 @@ def create_app() -> Flask:
 
             # 模拟测试提示词获取
             test_context = "这是一个测试技术背景"
+            test_draft = """# 测试专利标题
+
+## 技术领域
+本发明涉及一种测试技术。
+
+## 背景技术
+现有技术存在一些问题。
+
+## 发明内容
+本发明提供一种解决方案。"""
 
             writer_prompt = simple_prompt_engine.get_writer_prompt(
                 context=test_context, iteration=1, total_iterations=3
             )
 
             reviewer_prompt = simple_prompt_engine.get_reviewer_prompt(
-                context=test_context, current_draft="测试专利草案", iteration=1, total_iterations=3
+                context=test_context, current_draft=test_draft, iteration=1, total_iterations=3
             )
+
+            # 检查是否包含</text>标记以及是否被替换
+            reviewer_has_text_marker = "</text>" in reviewer_prompt
+            reviewer_contains_draft = test_draft in reviewer_prompt if test_draft else False
 
             test_results = {
                 "test_context": test_context,
+                "test_draft_length": len(test_draft),
+                "test_draft_preview": test_draft[:100] + "...",
                 "writer_prompt": {
                     "length": len(writer_prompt),
                     "preview": writer_prompt[:200] + "...",
@@ -122,8 +138,12 @@ def create_app() -> Flask:
                 },
                 "reviewer_prompt": {
                     "length": len(reviewer_prompt),
-                    "preview": reviewer_prompt[:200] + "...",
-                    "is_user_custom": reviewer_prompt.startswith("##") if reviewer_prompt else False
+                    "preview": reviewer_prompt[:300] + "...",
+                    "full_preview": reviewer_prompt,
+                    "is_user_custom": reviewer_prompt.startswith("##") if reviewer_prompt else False,
+                    "has_text_marker": reviewer_has_text_marker,
+                    "contains_draft_content": reviewer_contains_draft,
+                    "replacement_worked": reviewer_has_text_marker == False and reviewer_contains_draft == True
                 }
             }
 

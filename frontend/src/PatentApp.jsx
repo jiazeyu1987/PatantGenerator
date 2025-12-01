@@ -705,6 +705,48 @@ function PatentApp() {
               />
             </div>
 
+            {/* 使用说明 - 仅在审核者标签页显示 */}
+            {activeTab === "reviewer" && (
+              <div style={{
+                marginBottom: "20px",
+                padding: "12px",
+                backgroundColor: "#1f2937",
+                borderRadius: "6px",
+                border: "1px solid #374151"
+              }}>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "13px",
+                  margin: "0 0 8px 0",
+                  lineHeight: "1.4"
+                }}>
+                  💡 <strong>动态内容替换功能：</strong>
+                </p>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "12px",
+                  margin: "0 0 4px 0",
+                  lineHeight: "1.4"
+                }}>
+                  如果提示词中包含 <code style={{
+                    backgroundColor: "#374151",
+                    padding: "2px 4px",
+                    borderRadius: "3px",
+                    color: "#60a5fa",
+                    fontFamily: "monospace"
+                  }}>&lt;/text&gt;</code> 标记，系统会自动将其替换为当前轮次撰写者生成的专利内容。
+                </p>
+                <p style={{
+                  color: "#9ca3af",
+                  fontSize: "12px",
+                  margin: "0",
+                  lineHeight: "1.4"
+                }}>
+                  <strong>示例：</strong> "请对以下专利草案进行评审：<br/><br/>&lt;/text&gt;<br/><br/>请重点关注权利要求的新颖性。"
+                </p>
+              </div>
+            )}
+
             {/* 操作按钮 */}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button

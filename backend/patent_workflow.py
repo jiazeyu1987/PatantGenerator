@@ -86,8 +86,23 @@ def get_simple_prompt_engine():
                     if user_prompt and user_prompt.strip():
                         logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
                         logger.info(f"用户提示词开头: {user_prompt[:100]}...")
-                        logger.info("✅ 使用用户自定义审核者提示词（100%原样）")
-                        return user_prompt
+
+                        # 检查是否包含</text>标记
+                        if "</text>" in user_prompt:
+                            logger.info("检测到</text>标记，使用动态替换模式")
+                            final_prompt = _build_prompt_from_template(
+                                user_prompt,
+                                context=context,
+                                current_draft=current_draft,
+                                iteration=iteration,
+                                total_iterations=total_iterations,
+                                strict_mode=True
+                            )
+                        else:
+                            logger.info("✅ 使用用户自定义审核者提示词（100%原样）")
+                            final_prompt = user_prompt
+
+                        return final_prompt
                     else:
                         logger.info("用户未设置审核者提示词，使用系统默认")
                         return self._default_reviewer_prompt
@@ -630,6 +645,7 @@ def _build_prompt_from_template(
     context: str,
     previous_draft: Optional[str] = None,
     previous_review: Optional[str] = None,
+    current_draft: Optional[str] = None,
     iteration: int = 1,
     total_iterations: int = 1,
     strict_mode: bool = False
@@ -642,6 +658,7 @@ def _build_prompt_from_template(
         context: 技术背景和创新点上下文
         previous_draft: 上一版专利草案
         previous_review: 上一轮评审意见
+        current_draft: 当前轮次的专利草案（用于动态替换）
         iteration: 当前迭代轮次
         total_iterations: 总迭代轮次
         strict_mode: 严格执行模式，为True时严格按照用户输入执行，不添加任何额外内容
@@ -652,8 +669,22 @@ def _build_prompt_from_template(
     try:
         prompt = template
 
-        # 严格执行模式：直接返回用户输入，不做任何修改
-        if strict_mode:
+        # 严格模式下的特殊处理：支持动态替换
+        if strict_mode and "</text>" in prompt:
+            logger.info("检测到</text>标记，启用动态内容替换")
+            if current_draft:
+                original_length = len(prompt)
+                prompt = prompt.replace("</text>", current_draft)
+                logger.info(f"成功替换</text>标记，替换内容长度: {len(current_draft)} 字符")
+                logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
+            else:
+                logger.warning("检测到</text>标记但没有current_draft内容，保持原标记")
+                # 将标记替换为友好的提示信息
+                prompt = prompt.replace("</text>", "[当前专利草案内容]")
+                logger.info("已将</text>标记替换为提示文本")
+
+        # 严格模式：直接返回（如果无需动态替换）
+        elif strict_mode:
             logger.info(f"严格执行模式已启用：直接使用用户输入的提示词")
             logger.info(f"严格模式提示词长度: {len(prompt)} 字符")
             logger.info(f"严格模式提示词开头: {prompt[:100]}...")
