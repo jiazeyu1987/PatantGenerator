@@ -75,8 +75,12 @@ def get_simple_prompt_engine():
 
                 logger.info("SimplePromptEngine 初始化完成")
 
-            def get_writer_prompt(self, context, previous_draft=None, previous_review=None, iteration=1, total_iterations=1):
+            def get_writer_prompt(self, context, previous_draft=None, previous_review=None, iteration=1, total_iterations=1, idea_text=None):
                 logger.info("=== 开始获取撰写者提示词 ===")
+                logger.info(f"参数检查: iteration={iteration}, total_iterations={total_iterations}")
+                logger.info(f"idea_text参数检查: 存在={bool(idea_text)}, 长度={len(idea_text) if idea_text else 0}")
+                if idea_text:
+                    logger.info(f"idea_text内容预览: {idea_text[:100]}...")
 
                 try:
                     user_prompt = self.user_prompt_manager.get_user_prompt('writer')
@@ -85,11 +89,56 @@ def get_simple_prompt_engine():
                     if user_prompt and user_prompt.strip():
                         logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
                         logger.info(f"用户提示词开头: {user_prompt[:100]}...")
-                        logger.info("✅ 使用用户自定义撰写者提示词（100%原样）")
+                        logger.info(f"用户提示词是否包含<idea_text>标记: {'<idea_text>' in user_prompt}")
+
+                        # 检查是否包含 <idea_text> 标记，如果有则进行替换
+                        if "<idea_text>" in user_prompt:
+                            logger.info("🔍 检测到<idea_text>标记，启用创意文本替换")
+                            if idea_text and idea_text.strip():
+                                logger.info(f"✅ idea_text内容有效，开始替换")
+                                original_prompt = user_prompt
+                                user_prompt = user_prompt.replace("<idea_text>", idea_text)
+                                logger.info(f"✅ 成功替换<idea_text>标记")
+                                logger.info(f"   - 替换前提示词长度: {len(original_prompt)}")
+                                logger.info(f"   - 替换后提示词长度: {len(user_prompt)}")
+                                logger.info(f"   - 创意文本长度: {len(idea_text)}")
+                                logger.info(f"   - 替换后提示词开头: {user_prompt[:200]}...")
+                            else:
+                                logger.warning("⚠️ 检测到<idea_text>标记但idea_text为空或无效")
+                                user_prompt = user_prompt.replace("<idea_text>", "[用户创意内容]")
+                                logger.info("已将<idea_text>标记替换为占位文本")
+                        else:
+                            logger.info("ℹ️ 用户提示词中未检测到<idea_text>标记")
+
+                        logger.info("✅ 使用用户自定义撰写者提示词（支持<idea_text>替换）")
                         return user_prompt
                     else:
                         logger.info("用户未设置撰写者提示词，使用系统默认")
-                        return self._default_writer_prompt
+
+                        # 也检查默认提示词是否包含 <idea_text> 标记
+                        default_prompt = self._default_writer_prompt
+                        logger.info(f"系统默认提示词长度: {len(default_prompt)} 字符")
+                        logger.info(f"系统默认提示词是否包含<idea_text>标记: {'<idea_text>' in default_prompt}")
+
+                        if "<idea_text>" in default_prompt:
+                            logger.info("🔍 检测到系统默认提示词中的<idea_text>标记，启用创意文本替换")
+                            if idea_text and idea_text.strip():
+                                logger.info(f"✅ idea_text内容有效，开始替换默认提示词")
+                                original_prompt = default_prompt
+                                default_prompt = default_prompt.replace("<idea_text>", idea_text)
+                                logger.info(f"✅ 成功替换默认提示词中的<idea_text>标记")
+                                logger.info(f"   - 替换前提示词长度: {len(original_prompt)}")
+                                logger.info(f"   - 替换后提示词长度: {len(default_prompt)}")
+                                logger.info(f"   - 创意文本长度: {len(idea_text)}")
+                            else:
+                                logger.warning("⚠️ 检测到<idea_text>标记但idea_text为空或无效")
+                                default_prompt = default_prompt.replace("<idea_text>", "[用户创意内容]")
+                                logger.info("已将默认提示词中的<idea_text>标记替换为占位文本")
+                        else:
+                            logger.info("ℹ️ 系统默认提示词中未检测到<idea_text>标记")
+
+                        logger.info("✅ 使用系统默认撰写者提示词（支持<idea_text>替换）")
+                        return default_prompt
 
                 except Exception as e:
                     logger.error(f"检查用户撰写者提示词失败: {e}")
@@ -130,7 +179,7 @@ def get_simple_prompt_engine():
                     logger.error(f"检查用户审核者提示词失败: {e}")
                     return self._default_reviewer_prompt
 
-            def get_modifier_prompt(self, context, previous_draft, previous_review, iteration=1, total_iterations=1):
+            def get_modifier_prompt(self, context, previous_draft, previous_review, iteration=1, total_iterations=1, idea_text=None):
                 logger.info("=== 开始获取修改者提示词 ===")
 
                 try:
@@ -162,7 +211,8 @@ def get_simple_prompt_engine():
                                 previous_review=previous_review,
                                 iteration=iteration,
                                 total_iterations=total_iterations,
-                                strict_mode=True
+                                strict_mode=True,
+                                idea_text=idea_text
                             )
                         else:
                             logger.info("✅ 使用用户自定义修改者提示词（100%原样，无动态标记）")
@@ -197,6 +247,7 @@ def build_writer_prompt(
     iteration: int,
     total_iterations: int,
     template_id: Optional[str] = None,
+    idea_text: Optional[str] = None,
 ) -> str:
     """
     使用配置化提示词构建专利撰写提示词
@@ -208,6 +259,7 @@ def build_writer_prompt(
         iteration: 当前迭代轮次
         total_iterations: 总迭代轮次
         template_id: 模板ID，用于智能分析
+        idea_text: 用户输入的创意文本（用于创意模式下的 <idea_text> 标记替换）
 
     Returns:
         构建完成的提示词字符串
@@ -245,7 +297,8 @@ def build_writer_prompt(
                 previous_review=previous_review,
                 iteration=iteration,
                 total_iterations=total_iterations,
-                strict_mode=True
+                strict_mode=True,
+                idea_text=idea_text
             )
         else:
             logger.debug("用户未设置自定义撰写者提示词，使用系统默认")
@@ -257,7 +310,8 @@ def build_writer_prompt(
                 previous_review=previous_review,
                 iteration=iteration,
                 total_iterations=total_iterations,
-                template_id=template_id
+                template_id=template_id,
+                idea_text=idea_text  # 添加创意文本参数
             )
 
         # 检查提示词是否包含历史内容
@@ -460,6 +514,7 @@ def run_patent_iteration(
     progress_callback: Optional[callable] = None,
     template_id: Optional[str] = None,
     use_template: bool = True,
+    idea_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     运行专利生成迭代流程
@@ -470,6 +525,7 @@ def run_patent_iteration(
         base_name: 输出文件名前缀
         progress_callback: 进度回调函数 (progress: int, message: str) -> None
         template_id: 模板ID，如果为None则使用默认模板
+        idea_text: 用户输入的创意文本（用于创意模式下的 <idea_text> 标记替换）
         use_template: 是否使用模板生成DOCX文档
 
     Returns:
@@ -551,7 +607,9 @@ def run_patent_iteration(
             update_progress(base_progress, f"第 {i}/{total} 轮：准备撰写阶段")
 
             # 撰写/修改阶段 - 根据轮次选择不同角色
+            logger.info(f"🔧 第 {i}/{total} 轮：开始准备{ '撰写者' if i == 1 else '修改者' }提示词")
             simple_prompt_engine = get_simple_prompt_engine()
+            logger.info(f"✅ 已获取SimplePromptEngine实例")
 
             if i == 1:
                 # 第一轮：使用撰写者
@@ -559,30 +617,44 @@ def run_patent_iteration(
                 prompt_method = simple_prompt_engine.get_writer_prompt
                 role_name = 'writer'
                 role_display = '撰写者'
+                logger.info(f"📝 第 {i} 轮：使用撰写者角色")
             else:
                 # 第二轮及以后：使用修改者
                 update_progress(base_progress, f"第 {i}/{total} 轮：修改者优化专利草案")
                 prompt_method = simple_prompt_engine.get_modifier_prompt
                 role_name = 'modifier'
                 role_display = '修改者'
+                logger.info(f"✏️ 第 {i} 轮：使用修改者角色")
 
             # 获取对应的提示词
+            logger.info(f"🚀 开始调用 {role_display} 提示词方法")
+            logger.info(f"传递参数检查: context长度={len(context) if context else 0}, idea_text存在={bool(idea_text)}")
+            if idea_text:
+                logger.info(f"idea_text长度: {len(idea_text)}")
+
             if role_name == 'writer':
+                logger.info(f"📋 调用 get_writer_prompt 方法...")
                 current_prompt = prompt_method(
                     context=context,
                     previous_draft=draft,
                     previous_review=review,
                     iteration=i,
-                    total_iterations=total
+                    total_iterations=total,
+                    idea_text=idea_text  # 传递创意文本参数
                 )
             else:  # modifier
+                logger.info(f"📋 调用 get_modifier_prompt 方法...")
                 current_prompt = prompt_method(
                     context=context,
                     previous_draft=draft,
                     previous_review=review,
                     iteration=i,
-                    total_iterations=total
+                    total_iterations=total,
+                    idea_text=idea_text  # 传递创意文本参数
                 )
+
+            logger.info(f"✅ {role_display} 提示词获取完成，长度: {len(current_prompt)} 字符")
+            logger.info(f"提示词开头预览: {current_prompt[:200]}...")
 
             update_progress(writer_progress - 5, f"第 {i}/{total} 轮：调用 LLM ({role_display})")
             draft = call_llm(current_prompt)
@@ -739,7 +811,8 @@ def _build_prompt_from_template(
     current_draft: Optional[str] = None,
     iteration: int = 1,
     total_iterations: int = 1,
-    strict_mode: bool = False
+    strict_mode: bool = False,
+    idea_text: Optional[str] = None
 ) -> str:
     """
     从模板构建提示词，支持变量替换
@@ -753,6 +826,7 @@ def _build_prompt_from_template(
         iteration: 当前迭代轮次
         total_iterations: 总迭代轮次
         strict_mode: 严格执行模式，为True时严格按照用户输入执行，不添加任何额外内容
+        idea_text: 用户输入的创意文本（用于创意模式下的 <idea_text> 标记替换）
 
     Returns:
         构建完成的提示词字符串
@@ -804,6 +878,19 @@ def _build_prompt_from_template(
                     prompt = prompt.replace("</text>", "[当前专利草案内容]")
                     logger.info("已将</text>标记替换为提示文本")
 
+            # 支持创意模式专用标记 <idea_text>
+            if "<idea_text>" in prompt:
+                has_dynamic_markers = True
+                logger.info("检测到<idea_text>标记，启用创意文本替换")
+                if idea_text:
+                    original_length = len(prompt)
+                    prompt = prompt.replace("<idea_text>", idea_text)
+                    logger.info(f"成功替换<idea_text>标记，替换内容长度: {len(idea_text)} 字符")
+                    logger.info(f"替换后提示词总长度: {len(prompt)} 字符（原长度: {original_length}）")
+                else:
+                    logger.warning("检测到<idea_text>标记但没有创意文本内容")
+                    prompt = prompt.replace("<idea_text>", "[用户创意内容]")
+
             # 如果没有动态标记，直接返回原提示词
             if not has_dynamic_markers:
                 logger.info(f"严格模式已启用：直接使用用户输入的提示词（无动态标记）")
@@ -833,6 +920,16 @@ def _build_prompt_from_template(
         for placeholder, value in replacements.items():
             prompt = prompt.replace(placeholder, value)
 
+        # 处理 <idea_text> 标记（非严格模式）
+        if "<idea_text>" in prompt:
+            if idea_text:
+                original_length = len(prompt)
+                prompt = prompt.replace("<idea_text>", idea_text)
+                logger.info(f"非严格模式：成功替换<idea_text>标记，替换内容长度: {len(idea_text)} 字符")
+            else:
+                logger.warning("非严格模式：检测到<idea_text>标记但没有创意文本内容")
+                prompt = prompt.replace("<idea_text>", "[用户创意内容]")
+
         # 添加历史内容章节（如果需要且用户模板中包含相应占位符）
         if previous_draft and "{{tech_context}}" in prompt:
             # 如果模板中有技术上下文占位符，替换为用户提供的上下文
@@ -857,7 +954,8 @@ def get_effective_writer_prompt(
     previous_review: Optional[str],
     iteration: int,
     total_iterations: int,
-    template_id: Optional[str] = None
+    template_id: Optional[str] = None,
+    idea_text: Optional[str] = None
 ) -> str:
     """
     获取有效的撰写者提示词，优先使用用户自定义
@@ -895,7 +993,8 @@ def get_effective_writer_prompt(
                 previous_review=previous_review,
                 iteration=iteration,
                 total_iterations=total_iterations,
-                strict_mode=True
+                strict_mode=True,
+                idea_text=idea_text
             )
         else:
             logger.debug("用户未设置自定义撰写者提示词，使用系统默认")
@@ -906,7 +1005,8 @@ def get_effective_writer_prompt(
                 previous_review=previous_review,
                 iteration=iteration,
                 total_iterations=total_iterations,
-                template_id=template_id
+                template_id=template_id,
+                idea_text=idea_text
             )
 
     except Exception as e:

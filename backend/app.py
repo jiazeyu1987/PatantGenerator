@@ -357,11 +357,16 @@ def generate() -> Any:
         # 执行专利生成
         try:
             logger.info(f"开始生成专利，迭代次数: {iterations}，使用模板: {template_id or '无'}")
+
+            # 在创意模式下，提取并传递 idea_text
+            idea_text = validated_data.get("idea_text") if mode == "idea" else None
+
             result = run_patent_iteration(
                 context=context,
                 iterations=iterations,
                 base_name=output_name,
-                template_id=template_id
+                template_id=template_id,
+                idea_text=idea_text
             )
             logger.info(f"专利生成成功: {result.get('output_path')}")
         except Exception as e:
@@ -455,12 +460,17 @@ def generate_async() -> Any:
 
         # 提交异步任务
         task_manager = get_task_manager()
+
+        # 在创意模式下，提取并传递 idea_text
+        idea_text = validated_data.get("idea_text") if mode == "idea" else None
+
         task_id = task_manager.submit_task(
             run_patent_iteration,
             context=context,
             iterations=iterations,
             base_name=output_name,
-            template_id=template_id
+            template_id=template_id,
+            idea_text=idea_text
         )
 
         logger.info(f"异步任务已提交，任务ID: {task_id}")
