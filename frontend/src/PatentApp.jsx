@@ -3,7 +3,7 @@ import TemplateSelector from "./TemplateSelector";
 import ConversationViewer from "./ConversationViewer";
 
 function PatentApp() {
-  const [mode, setMode] = useState("code");
+  const [mode, setMode] = useState("idea");
   const [projectPath, setProjectPath] = useState("..");
   const [ideaText, setIdeaText] = useState("");
   const [iterations, setIterations] = useState(3);

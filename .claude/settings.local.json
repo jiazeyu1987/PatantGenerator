@@ -5,7 +5,8 @@
       "Bash(npx vite build:*)",
       "Bash(python:*)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

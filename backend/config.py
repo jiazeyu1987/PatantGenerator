@@ -9,7 +9,7 @@ from pathlib import Path
 class ServerConfig:
     """服务器配置"""
     host: str = "0.0.0.0"
-    port: int = 3000
+    port: int = 8081
     debug: bool = False
     threaded: bool = True
     secret_key: Optional[str] = None

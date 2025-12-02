@@ -180,7 +180,7 @@ Conversation tracking (`conversation_db.py`):
 1. Ensure `ANTHROPIC_API_KEY` environment variable is properly configured
 2. Install backend dependencies: `cd backend && pip install -r requirements.txt`
 3. Install frontend dependencies: `cd frontend && npm install`
-4. Start backend server: `python app.py` (listens on http://localhost:3000)
+4. Start backend server: `python app.py` (listens on http://localhost:8081)
 5. Test both code and idea modes with different iteration counts
 
 ### Configuration Options

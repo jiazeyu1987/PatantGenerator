@@ -1,0 +1,180 @@
+Multi-Role Dialogue System - Requirements
+=========================================
+
+1. System Goal
+--------------
+Build a configurable multi-role dialogue system that can simulate or organize conversations among many roles (teacher, professor, official, student, lawyer, etc.). The system should:
+
+- Allow each role to have its own persona prompt and speaking style.
+- Allow the user to define the speaking order (who speaks first, second, etc.), including loops and conditional termination.
+- Enforce strictly sequential turns: only one role speaks at a time.
+- Allow each role to respond to a specific previous role or message.
+- Persist the full conversation history, and support saving and restoring a session.
+
+
+2. Core Concepts and Data Model
+-------------------------------
+
+2.1 Role
+- Example fields:
+  - `role_id`: unique id (e.g. "teacher_1").
+  - `name`: display name (e.g. "Teacher", "Professor", "Official").
+  - `description`: short description of the role/identity.
+  - `system_prompt`: persona prompt / instructions for this role.
+  - `style`: optional speaking style (formal, casual, strict, humorous, etc.).
+  - `constraints`: optional limitations (topics, length, etc.).
+- Requirements:
+  - Support a library of predefined role templates.
+  - Support user-defined roles that can be created, edited and saved.
+
+2.2 Message
+- Example fields:
+  - `message_id`: unique id.
+  - `role_id`: who speaks.
+  - `target_role_id`: the role this message mainly responds to (optional).
+  - `content`: message text.
+  - `timestamp`: when the message was generated.
+  - `metadata`: optional extra info (token count, generation parameters, etc.).
+- Requirements:
+  - All messages must be stored in order to form a complete conversation history.
+
+2.3 Session / Conversation
+- Example fields:
+  - `session_id`: unique id.
+  - `title`: optional session title.
+  - `roles`: set of roles participating in this session.
+  - `flow_definition`: configuration of the dialogue flow (see below).
+  - `messages`: ordered list of all messages.
+  - `state`: current state (running / finished / paused).
+- Requirements:
+  - The entire session can be serialized to a file (e.g. JSON) for save/restore.
+
+2.4 Flow / Script
+- Purpose: define the speaking order, loops and stop conditions.
+- Basic elements:
+  - `step_id`: unique id of a step.
+  - `speaker_role_id`: which role speaks at this step.
+  - `reply_to`: optional target (previous role, specific role, or specific message).
+  - `next`: next step or conditional branches.
+  - `loop`: optional loop configuration (repeat a block until a condition).
+  - `stop_condition`: global condition to stop the whole flow.
+- Requirements:
+  - Support simple linear sequences: A -> B -> C -> ...
+  - Support loops, e.g. repeating (Student -> Teacher) several times or until a condition is met.
+  - Support simple conditional branching based on conversation content or external flags.
+
+
+3. Functional Requirements
+--------------------------
+
+3.1 Role Management
+- Create role:
+  - User can define name, description, system_prompt, style and constraints.
+- Edit role:
+  - User can modify existing roles.
+- Delete role:
+  - User can delete custom roles (system roles may be protected or read-only).
+- Role templates:
+  - Provide default templates for common roles (teacher, professor, official, student, lawyer, etc.).
+
+3.2 Flow Authoring
+- Sequential ordering:
+  - User can configure the exact order of speaking steps (e.g. Teacher -> Student -> Professor -> Official -> Lawyer).
+- Targeted responses:
+  - For each step, user can specify:
+    - Respond to the immediately previous speaker.
+    - Respond to a specific role’s latest message.
+    - Respond to a specific message by id.
+- Loop configuration:
+  - Fixed loops: repeat a block N times.
+  - Conditional loops: repeat a block until a condition is true.
+- Stop conditions:
+  - Maximum number of turns.
+  - Detection of certain keywords or states in messages.
+  - Manual stop requested by the user.
+- Execution modes:
+  - Auto mode: engine runs through the flow automatically.
+  - Step mode: engine runs one step at a time, with user confirmation between steps.
+
+3.3 Dialogue Engine
+- Turn control:
+  - At any time exactly one role generates one message; only after completion does the engine move to the next step.
+- Context construction:
+  - For the current role, the engine builds a prompt including:
+    - The role’s own system_prompt.
+    - Relevant conversation history (e.g. last K messages).
+    - The specific message or role being replied to, if `reply_to` is set.
+    - Optional global constraints from the user.
+- Response targeting:
+  - The engine should clearly indicate in the prompt “who you are replying to” and possibly quote or summarize the target message.
+- Flow control:
+  - Use `flow_definition` to select the next step.
+  - Evaluate loop and stop conditions after each step.
+
+3.4 Conditions and Loops
+- Condition types (extensible):
+  - Turn count: stop after N steps.
+  - Role-based: stop when a specific role declares a final answer/summary.
+  - Content-based: check if a message contains certain keywords or markers.
+  - External: user input or external flag (e.g. a button press).
+- Safety:
+  - Configure hard limits (max turns, max tokens, max time) to avoid infinite loops or runaway sessions.
+
+3.5 History and Persistence
+- History:
+  - Store all messages with their metadata, in order.
+- Save session:
+  - Export a session file containing:
+    - Basic session info.
+    - Snapshot of role definitions used in this session.
+    - Flow definition.
+    - Current execution pointer (step index, loop counters, etc.).
+    - Full message history.
+- Restore session:
+  - Load from a session file and restore the engine state so that:
+    - No messages are regenerated.
+    - The flow continues from where it stopped.
+- History browsing:
+  - UI can show the timeline of messages, support filtering by role and basic search.
+
+3.6 User Interface (High-Level)
+- Role management view:
+  - List roles, create/edit/delete roles.
+- Flow editor:
+  - Show steps in a list or visual flow, indicating speaker and reply target.
+  - Configure loops and stop conditions.
+- Runtime view:
+  - Live display of the dialogue, clearly showing “who speaks to whom”.
+  - Show current step and loop count.
+  - Controls: play, pause, next step, stop.
+- Session management:
+  - List saved sessions.
+  - Save current session, load previous sessions.
+
+
+4. Non-Functional Requirements (Initial)
+----------------------------------------
+
+4.1 Scalability
+- Support at least dozens of roles in the library.
+- Support conversations of hundreds of messages per session, with reasonable performance.
+
+4.2 Maintainability
+- Flow definitions should be stored in a clear, version-control-friendly format (e.g. JSON or YAML).
+- Roles and flows should be configuration-driven as much as possible, with minimal hard-coded logic.
+
+4.3 Observability
+- Log important events:
+  - Step transitions and loop iterations.
+  - Condition evaluation results.
+  - Errors and exceptions.
+
+
+5. Optional Future Extensions
+-----------------------------
+
+- Per-role model selection or parameters (different models for different roles).
+- Integration with knowledge bases or documents for certain expert roles.
+- Evaluation or judge roles that score or comment on other roles’ messages.
+- Export conversations to Markdown/HTML/PDF for archiving or presentation.
+
