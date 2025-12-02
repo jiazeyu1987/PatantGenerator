@@ -24,7 +24,8 @@ function PatentApp() {
   const [userPrompts, setUserPrompts] = useState({
     writer: "",
     modifier: "",
-    reviewer: ""
+    reviewer: "",
+    template: ""
   });
 
   // 加载用户提示词
@@ -530,12 +531,6 @@ function PatentApp() {
               />
             </div>
 
-            <TemplateSelector
-              selectedTemplateId={selectedTemplateId}
-              onTemplateChange={setSelectedTemplateId}
-              disabled={loading}
-            />
-
             <div className="actions">
               <button type="submit" disabled={loading}>
                 {loading ? "处理中..." : "开始生成"}
@@ -574,6 +569,15 @@ function PatentApp() {
               <div className="status-message">{status}</div>
             )}
           </form>
+        </section>
+
+        {/* 模板选择器 - 移出表单避免冲突 */}
+        <section className="card">
+          <TemplateSelector
+            selectedTemplateId={selectedTemplateId}
+            onTemplateChange={setSelectedTemplateId}
+            disabled={loading}
+          />
         </section>
 
         <section className="card">
@@ -679,11 +683,24 @@ function PatentApp() {
                   backgroundColor: activeTab === "reviewer" ? "#3b82f6" : "#1f2937",
                   color: "#e5e7eb",
                   border: "none",
+                  cursor: "pointer",
+                  marginRight: "2px"
+                }}
+              >
+                审核者提示词
+              </button>
+              <button
+                onClick={() => setActiveTab("template")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "template" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
                   borderRadius: "0 6px 6px 0",
                   cursor: "pointer"
                 }}
               >
-                审核者提示词
+                模板分析提示词
               </button>
             </div>
 
@@ -692,19 +709,24 @@ function PatentApp() {
               <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <label style={{ color: "#9ca3af", fontSize: "14px" }}>
                   {activeTab === "writer" ? "撰写者提示词" :
-                   activeTab === "modifier" ? "修改者提示词" : "审核者提示词"}
+                   activeTab === "modifier" ? "修改者提示词" :
+                   activeTab === "reviewer" ? "审核者提示词" : "模板分析提示词"}
                 </label>
                 <span style={{ color: "#6b7280", fontSize: "12px" }}>
-                  {userPrompts[activeTab].length} 字符
+                  {(userPrompts[activeTab] || '').length} 字符
                 </span>
               </div>
               <textarea
-                value={userPrompts[activeTab]}
+                value={userPrompts[activeTab] || ''}
                 onChange={(e) => setUserPrompts(prev => ({
                   ...prev,
                   [activeTab]: e.target.value
                 }))}
-                placeholder={`请输入${activeTab === "writer" ? "撰写者" : activeTab === "modifier" ? "修改者" : "审核者"}提示词...`}
+                placeholder={`请输入${
+                  activeTab === "writer" ? "撰写者" :
+                  activeTab === "modifier" ? "修改者" :
+                  activeTab === "reviewer" ? "审核者" : "模板分析"
+                }提示词...`}
                 style={{
                   width: "100%",
                   height: "300px",

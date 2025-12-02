@@ -73,6 +73,43 @@ def get_simple_prompt_engine():
 - 语言客观、严谨，避免营销化表述
 - 确保修改后的文档符合中国专利法要求"""
 
+                self._default_template_prompt = """你现在扮演一名专业的专利模板分析师。
+
+任务：对给定的专利模板文件（DOCX格式）进行深入分析，评估其质量、复杂度和实用性。
+
+分析维度：
+1. 模板结构完整性：
+   - 检查是否包含专利文档的标准章节（标题、技术领域、背景技术、发明内容、附图说明、具体实施方式、权利要求书、摘要）
+   - 评估章节顺序和逻辑结构的合理性
+   - 识别缺失或冗余的章节
+
+2. 内容质量评估：
+   - 分析模板指导语的清晰度和专业性
+   - 评估示例内容的准确性和完整性
+   - 检查是否符合中国专利法要求
+
+3. 可用性分析：
+   - 评估模板对不同技术领域的适应性
+   - 分析修改和定制的难易程度
+   - 判断模板对新手用户的友好度
+
+4. 技术特征识别：
+   - 识别模板中使用的关键技术和术语
+   - 分析模板支持的技术创新类型
+   - 评估模板对复杂技术的支持能力
+
+5. 改进建议：
+   - 提出具体的优化建议
+   - 推荐适合的应用场景
+   - 建议增强或简化的部分
+
+请基于提供的模板内容，输出一份结构化、专业化的模板分析报告，包含详细的质量评分和实用建议。
+
+注意：
+- 分析要客观、专业，基于实际的模板内容
+- 重点评估模板的实用性和改进价值
+- 提供具体可操作的建议"""
+
                 logger.info("SimplePromptEngine 初始化完成")
 
             def get_writer_prompt(self, context, previous_draft=None, previous_review=None, iteration=1, total_iterations=1, idea_text=None):
@@ -227,6 +264,26 @@ def get_simple_prompt_engine():
                     logger.error(f"检查用户修改者提示词失败: {e}")
                     return self._default_modifier_prompt
 
+            def get_template_prompt(self, template_content=None, **kwargs):
+                """获取模板分析提示词"""
+                logger.info("=== 开始获取模板分析提示词 ===")
+
+                try:
+                    user_prompt = self.user_prompt_manager.get_user_prompt('template')
+                    logger.info(f"用户模板分析提示词检查: 存在={bool(user_prompt)}")
+
+                    if user_prompt and user_prompt.strip():
+                        logger.info(f"用户提示词长度: {len(user_prompt)} 字符")
+                        logger.info("✅ 使用用户自定义模板分析提示词")
+                        return user_prompt
+                    else:
+                        logger.info("用户未设置模板分析提示词，使用系统默认")
+                        return self._default_template_prompt
+
+                except Exception as e:
+                    logger.error(f"检查用户模板分析提示词失败: {e}")
+                    return self._default_template_prompt
+
         return SimplePromptEngine()
 
     except Exception as e:
@@ -235,8 +292,12 @@ def get_simple_prompt_engine():
         class EmptyPromptEngine:
             def get_writer_prompt(self, *args, **kwargs):
                 return "默认撰写者提示词"
+            def get_modifier_prompt(self, *args, **kwargs):
+                return "默认修改者提示词"
             def get_reviewer_prompt(self, *args, **kwargs):
                 return "默认审核者提示词"
+            def get_template_prompt(self, *args, **kwargs):
+                return "默认模板分析提示词"
         return EmptyPromptEngine()
 
 

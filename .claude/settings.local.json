@@ -3,7 +3,9 @@
     "allow": [
       "Bash(find:*)",
       "Bash(npx vite build:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

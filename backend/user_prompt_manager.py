@@ -1,7 +1,7 @@
 """
 用户自定义提示词管理器
 
-负责管理用户自定义的撰写者、修改者和审核者提示词，
+负责管理用户自定义的撰写者、修改者、审核者和模板分析提示词，
 支持保存、读取、删除和持久化存储功能。
 """
 
@@ -81,7 +81,8 @@ class UserPromptManager:
             "prompts": {
                 "writer": "",
                 "modifier": "",
-                "reviewer": ""
+                "reviewer": "",
+                "template": ""
             },
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
@@ -113,7 +114,7 @@ class UserPromptManager:
         获取用户自定义提示词
 
         Args:
-            prompt_type: 提示词类型 ('writer', 'modifier' 或 'reviewer')
+            prompt_type: 提示词类型 ('writer', 'modifier', 'reviewer' 或 'template')
             user_id: 用户ID，默认使用默认用户
 
         Returns:
@@ -122,7 +123,7 @@ class UserPromptManager:
         if user_id is None:
             user_id = self.default_user_id
 
-        if prompt_type not in ['writer', 'modifier', 'reviewer']:
+        if prompt_type not in ['writer', 'modifier', 'reviewer', 'template']:
             logger.error(f"无效的提示词类型: {prompt_type}")
             return None
 
@@ -147,7 +148,7 @@ class UserPromptManager:
         设置用户自定义提示词
 
         Args:
-            prompt_type: 提示词类型 ('writer', 'modifier' 或 'reviewer')
+            prompt_type: 提示词类型 ('writer', 'modifier', 'reviewer' 或 'template')
             prompt_content: 提示词内容
             user_id: 用户ID，默认使用默认用户
 
@@ -157,7 +158,7 @@ class UserPromptManager:
         if user_id is None:
             user_id = self.default_user_id
 
-        if prompt_type not in ['writer', 'modifier', 'reviewer']:
+        if prompt_type not in ['writer', 'modifier', 'reviewer', 'template']:
             logger.error(f"无效的提示词类型: {prompt_type}")
             return False
 
@@ -195,7 +196,7 @@ class UserPromptManager:
         删除用户自定义提示词
 
         Args:
-            prompt_type: 提示词类型 ('writer', 'modifier' 或 'reviewer')
+            prompt_type: 提示词类型 ('writer', 'modifier', 'reviewer' 或 'template')
             user_id: 用户ID，默认使用默认用户
 
         Returns:
@@ -204,7 +205,7 @@ class UserPromptManager:
         if user_id is None:
             user_id = self.default_user_id
 
-        if prompt_type not in ['writer', 'modifier', 'reviewer']:
+        if prompt_type not in ['writer', 'modifier', 'reviewer', 'template']:
             logger.error(f"无效的提示词类型: {prompt_type}")
             return False
 
@@ -258,7 +259,7 @@ class UserPromptManager:
         检查用户是否设置了指定类型的提示词
 
         Args:
-            prompt_type: 提示词类型 ('writer', 'modifier' 或 'reviewer')
+            prompt_type: 提示词类型 ('writer', 'modifier', 'reviewer' 或 'template')
             user_id: 用户ID，默认使用默认用户
 
         Returns:

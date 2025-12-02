@@ -79,7 +79,7 @@ def create_app() -> Flask:
             results = {}
 
             # 设置各角色提示词
-            for role in ['writer', 'modifier', 'reviewer']:
+            for role in ['writer', 'modifier', 'reviewer', 'template']:
                 if role in data:
                     prompt = data[role]
                     if isinstance(prompt, str):

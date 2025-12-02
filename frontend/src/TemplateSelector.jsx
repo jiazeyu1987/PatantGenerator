@@ -87,35 +87,83 @@ function TemplateSelector({ selectedTemplateId, onTemplateChange, disabled = fal
   };
 
   // 分析指定模板
-  const analyzeTemplate = async (templateId) => {
+  const analyzeTemplate = async (templateId, event) => {
+    // 防止事件冒泡和表单提交
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    console.log('🔍 [调试] 分析模板按钮被点击');
+    console.log('🔍 [调试] 模板ID:', templateId);
+
     if (analyzingTemplates.has(templateId)) {
+      console.log('⚠️ [调试] 模板正在分析中，跳过重复请求');
       return;
     }
 
     setAnalyzingTemplates(prev => new Set(prev).add(templateId));
 
     try {
-      const response = await fetch(`/api/templates/${templateId}/analysis`, {
+      // 获取用户的模板分析提示词
+      let customPrompt = null;
+      try {
+        console.log('🔍 [调试] 开始获取用户自定义提示词...');
+        const promptsResponse = await fetch('/api/user/prompts');
+        const promptsData = await promptsResponse.json();
+        console.log('🔍 [调试] 用户提示词API响应:', promptsData);
+
+        if (promptsData.success && promptsData.data && promptsData.data.prompts && promptsData.data.prompts.template) {
+          customPrompt = promptsData.data.prompts.template;
+          console.log('✅ [调试] 使用用户自定义模板分析提示词:', customPrompt);
+        } else {
+          console.log('ℹ️ [调试] 未找到用户自定义模板分析提示词，将使用默认提示词');
+        }
+      } catch (err) {
+        console.warn('⚠️ [调试] 获取用户提示词失败，使用默认提示词:', err);
+      }
+
+      const requestBody = {
+        template_id: templateId
+      };
+
+      // 如果提供了自定义提示词，添加到请求中
+      if (customPrompt && customPrompt.trim()) {
+        requestBody.custom_prompt = customPrompt;
+      }
+
+      console.log('📤 [调试] 发送模板分析请求:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch('/api/templates/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ force_reanalyze: true })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
+        console.error('❌ [调试] 模板分析请求失败，状态码:', response.status);
         throw new Error(`分析模板失败: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('📥 [调试] 模板分析API响应:', JSON.stringify(data, null, 2));
+
       if (data.ok && data.analysis) {
+        console.log('✅ [调试] 模板分析成功，更新分析结果');
+        console.log('📊 [调试] 分析结果详情:', data.analysis);
         setAnalysisResults(prev => ({
           ...prev,
           [templateId]: data.analysis
         }));
+      } else {
+        console.warn('⚠️ [调试] 模板分析返回空结果或失败状态');
       }
     } catch (err) {
-      console.error('分析模板失败:', err);
+      console.error('❌ [调试] 分析模板失败:', err);
+      console.error('❌ [调试] 错误详情:', err.message);
+      console.error('❌ [调试] 错误堆栈:', err.stack);
       setError(`分析模板失败: ${err.message}`);
     } finally {
       setAnalyzingTemplates(prev => {
@@ -270,31 +318,60 @@ function TemplateSelector({ selectedTemplateId, onTemplateChange, disabled = fal
                     </div>
 
                     <div className="analysis-metrics">
-                      <div className="metric">
-                        <span className="metric-label">复杂度:</span>
-                        <span className={`metric-value complexity-${analysis.complexity_score > 0.7 ? 'high' : analysis.complexity_score > 0.4 ? 'medium' : 'low'}`}>
-                          {(analysis.complexity_score * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="metric">
-                        <span className="metric-label">质量评分:</span>
-                        <span className={`metric-value quality-${analysis.quality_score > 0.7 ? 'high' : analysis.quality_score > 0.4 ? 'medium' : 'low'}`}>
-                          {(analysis.quality_score * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="metric">
-                        <span className="metric-label">模板类型:</span>
-                        <span className="metric-value">{analysis.template_type}</span>
-                      </div>
+                      {analysis.complexity_score !== undefined && (
+                        <div className="metric">
+                          <span className="metric-label">复杂度:</span>
+                          <span className={`metric-value complexity-${analysis.complexity_score > 0.7 ? 'high' : analysis.complexity_score > 0.4 ? 'medium' : 'low'}`}>
+                            {(analysis.complexity_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
+                      {analysis.quality_score !== undefined && (
+                        <div className="metric">
+                          <span className="metric-label">质量评分:</span>
+                          <span className={`metric-value quality-${analysis.quality_score > 0.7 ? 'high' : analysis.quality_score > 0.4 ? 'medium' : 'low'}`}>
+                            {(analysis.quality_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
+                      {analysis.placeholder_count !== undefined && (
+                        <div className="metric">
+                          <span className="metric-label">占位符数量:</span>
+                          <span className="metric-value">{analysis.placeholder_count} 个</span>
+                        </div>
+                      )}
+                      {analysis.file_size && (
+                        <div className="metric">
+                          <span className="metric-label">文件大小:</span>
+                          <span className="metric-value">{(analysis.file_size / 1024).toFixed(1)} KB</span>
+                        </div>
+                      )}
                     </div>
 
-                    {analysis.applicable_domains && analysis.applicable_domains.length > 0 && (
-                      <div className="analysis-domains">
-                        <span className="metric-label">适用领域:</span>
-                        <div className="domain-tags">
-                          {analysis.applicable_domains.map((domain, index) => (
-                            <span key={index} className="domain-tag">{domain}</span>
-                          ))}
+                    {/* 详细分析结果 */}
+                    {analysis.detailed_analysis && (
+                      <div className="detailed-analysis">
+                        <div className="analysis-content">
+                          <div className="analysis-toggle">
+                            <button
+                              onClick={() => {
+                                const content = document.querySelector('.analysis-content-text');
+                                if (content.style.display === 'none') {
+                                  content.style.display = 'block';
+                                  event.target.textContent = '隐藏详细分析';
+                                } else {
+                                  content.style.display = 'none';
+                                  event.target.textContent = '显示详细分析';
+                                }
+                              }}
+                              className="toggle-btn"
+                            >
+                              显示详细分析
+                            </button>
+                          </div>
+                          <pre className="analysis-content-text" style={{ display: 'none' }}>
+                            {analysis.detailed_analysis}
+                          </pre>
                         </div>
                       </div>
                     )}
@@ -302,7 +379,7 @@ function TemplateSelector({ selectedTemplateId, onTemplateChange, disabled = fal
                     <div className="analysis-actions">
                       <button
                         type="button"
-                        onClick={() => analyzeTemplate(selectedTemplateId)}
+                        onClick={(event) => analyzeTemplate(selectedTemplateId, event)}
                         className="analyze-btn"
                         disabled={analyzingTemplates.has(selectedTemplateId)}
                       >
@@ -328,7 +405,7 @@ function TemplateSelector({ selectedTemplateId, onTemplateChange, disabled = fal
                   <div className="template-analysis-actions">
                     <button
                       type="button"
-                      onClick={() => analyzeTemplate(selectedTemplateId)}
+                      onClick={(event) => analyzeTemplate(selectedTemplateId, event)}
                       className="analyze-btn"
                       disabled={analyzingTemplates.has(selectedTemplateId)}
                     >

@@ -15,7 +15,9 @@ function App() {
   const [activeTab, setActiveTab] = useState("writer");
   const [userPrompts, setUserPrompts] = useState({
     writer: "",
-    reviewer: ""
+    modifier: "",
+    reviewer: "",
+    template: ""
   });
 
   // 加载用户提示词
@@ -300,7 +302,7 @@ function App() {
             </div>
 
             {/* 标签页 */}
-            <div style={{ marginBottom: "20px" }}>
+            <div style={{ marginBottom: "20px", display: "flex" }}>
               <button
                 onClick={() => setActiveTab("writer")}
                 style={{
@@ -316,17 +318,43 @@ function App() {
                 撰写者提示词
               </button>
               <button
+                onClick={() => setActiveTab("modifier")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "modifier" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
+                  cursor: "pointer",
+                  marginRight: "2px"
+                }}
+              >
+                修改者提示词
+              </button>
+              <button
                 onClick={() => setActiveTab("reviewer")}
                 style={{
                   padding: "8px 16px",
                   backgroundColor: activeTab === "reviewer" ? "#3b82f6" : "#1f2937",
                   color: "#e5e7eb",
                   border: "none",
+                  cursor: "pointer",
+                  marginRight: "2px"
+                }}
+              >
+                审核者提示词
+              </button>
+              <button
+                onClick={() => setActiveTab("template")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: activeTab === "template" ? "#3b82f6" : "#1f2937",
+                  color: "#e5e7eb",
+                  border: "none",
                   borderRadius: "0 6px 6px 0",
                   cursor: "pointer"
                 }}
               >
-                审核者提示词
+                模板分析提示词
               </button>
             </div>
 
@@ -334,10 +362,13 @@ function App() {
             <div style={{ marginBottom: "20px" }}>
               <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <label style={{ color: "#9ca3af", fontSize: "14px" }}>
-                  {activeTab === "writer" ? "撰写者提示词" : "审核者提示词"}
+                  {activeTab === "writer" ? "撰写者提示词" :
+                   activeTab === "modifier" ? "修改者提示词" :
+                   activeTab === "reviewer" ? "审核者提示词" :
+                   "模板分析提示词"}
                 </label>
                 <span style={{ color: "#6b7280", fontSize: "12px" }}>
-                  {userPrompts[activeTab].length} 字符
+                  {userPrompts[activeTab]?.length || 0} 字符
                 </span>
               </div>
               <textarea
@@ -346,7 +377,12 @@ function App() {
                   ...prev,
                   [activeTab]: e.target.value
                 }))}
-                placeholder={`请输入${activeTab === "writer" ? "撰写者" : "审核者"}提示词...`}
+                placeholder={`请输入${
+  activeTab === "writer" ? "撰写者" :
+  activeTab === "modifier" ? "修改者" :
+  activeTab === "reviewer" ? "审核者" :
+  "模板分析"
+}提示词...`}
                 style={{
                   width: "100%",
                   height: "300px",
