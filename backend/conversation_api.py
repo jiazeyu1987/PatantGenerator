@@ -142,8 +142,9 @@ def get_round_conversations(task_id: str, round_number: int):
     try:
         conversation_db = get_conversation_db()
 
-        # 获取撰写者和审批者的对话
+        # 获取撰写者、修改者和审批者的对话
         writer_conversation = conversation_db.get_conversation_round(task_id, round_number, 'writer')
+        modifier_conversation = conversation_db.get_conversation_round(task_id, round_number, 'modifier')
         reviewer_conversation = conversation_db.get_conversation_round(task_id, round_number, 'reviewer')
 
         result = {}
@@ -154,6 +155,14 @@ def get_round_conversations(task_id: str, round_number: int):
                 'prompt': writer_conversation.prompt,
                 'response': writer_conversation.response,
                 'timestamp': writer_conversation.timestamp
+            }
+
+        if modifier_conversation:
+            result['modifier'] = {
+                'id': modifier_conversation.id,
+                'prompt': modifier_conversation.prompt,
+                'response': modifier_conversation.response,
+                'timestamp': modifier_conversation.timestamp
             }
 
         if reviewer_conversation:

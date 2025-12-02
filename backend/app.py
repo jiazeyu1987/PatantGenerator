@@ -82,6 +82,7 @@ def create_app() -> Flask:
     @app.route("/api/user/prompts", methods=["GET"])
     def get_user_prompts():
         """获取用户提示词"""
+        logger = logging.getLogger(__name__)
         try:
             manager = get_user_prompt_manager()
             prompts = manager.get_all_user_prompts()
@@ -105,6 +106,7 @@ def create_app() -> Flask:
     @app.route("/api/user/prompts", methods=["POST"])
     def set_user_prompts():
         """设置用户提示词"""
+        logger = logging.getLogger(__name__)
         try:
             data = request.get_json()
             if not data:
@@ -158,6 +160,7 @@ def create_app() -> Flask:
     @app.route("/api/debug/prompts", methods=["GET"])
     def debug_prompts():
         """调试提示词使用情况 - 使用内联简单提示词引擎"""
+        logger = logging.getLogger(__name__)
         try:
             from patent_workflow import get_simple_prompt_engine
 
@@ -220,6 +223,7 @@ def create_app() -> Flask:
     @app.route("/api/debug/test-prompts", methods=["GET"])
     def test_prompts():
         """测试提示词获取功能"""
+        logger = logging.getLogger(__name__)
         try:
             from patent_workflow import get_simple_prompt_engine
 
