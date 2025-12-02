@@ -10,8 +10,9 @@ from validators import ValidationError, validate_request_data, sanitize_error_me
 from task_manager import get_task_manager, TaskStatus
 from config import get_config
 from chat_log_api import register_chat_log_api
-# 简化的模板处理
+# 完整的模板处理
 from conversation_api import register_conversation_routes
+from template_api import register_template_api
 from user_prompt_manager import get_user_prompt_manager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,48 +33,7 @@ def create_app() -> Flask:
     register_chat_log_api(app)
 
     # 注册模板管理 API
-    # 简化的模板 API
-    @app.route("/api/templates/", methods=["GET"])
-    def get_templates():
-        """获取模板列表"""
-        try:
-            # 简化的模板列表，硬编码以避免复杂的依赖问题
-            templates = [
-                {
-                    'id': 'default',
-                    'name': '默认模板',
-                    'description': '系统默认专利模板',
-                    'is_default': True,
-                    'is_valid': True,
-                    'has_analysis': False,
-                    'created_at': '2025-12-01T00:00:00.000Z',
-                    'file_size': 0,
-                    'placeholder_count': 0
-                }
-            ]
-
-            stats = {
-                'total_templates': 1,
-                'valid_templates': 1,
-                'invalid_templates': 0
-            }
-
-            return jsonify({
-                'ok': True,
-                'templates': templates,
-                'default_template_id': 'default',
-                'stats': stats
-            })
-
-        except Exception as e:
-            import traceback
-            print(f"获取模板列表失败: {e}")
-            print(f"详细错误: {traceback.format_exc()}")
-
-            return jsonify({
-                'ok': False,
-                'error': f"获取模板列表失败: {str(e)}"
-            }), 500
+    register_template_api(app)
 
     # 注册对话历史 API
     register_conversation_routes(app)

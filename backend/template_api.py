@@ -19,16 +19,32 @@ template_bp = Blueprint('template', __name__, url_prefix='/api/templates')
 def get_templates():
     """获取所有模板列表"""
     try:
-        manager = get_template_manager()
-        templates = manager.get_template_list()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("🔍 接收到模板列表请求")
 
-        return jsonify({
+        manager = get_template_manager()
+        logger.info(f"✅ 模板管理器初始化成功，当前有 {len(manager.templates)} 个模板")
+
+        templates = manager.get_template_list()
+        logger.info(f"📋 获取到 {len(templates)} 个模板信息")
+
+        result = {
             'ok': True,
             'templates': templates,
             'default_template_id': manager.default_template_id,
             'stats': manager.get_stats()
-        })
+        }
+
+        logger.info(f"✅ 模板列表请求成功，返回模板数量: {len(templates)}")
+        return jsonify(result)
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ 获取模板列表失败: {e}")
+        logger.error(f"详细错误: {traceback.format_exc()}")
+
         return jsonify({
             'ok': False,
             'error': f"获取模板列表失败: {str(e)}"

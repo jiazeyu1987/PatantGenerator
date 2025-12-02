@@ -246,31 +246,40 @@ class TemplateManager:
 
     def _load_templates(self):
         """加载所有模板文件"""
+        logger.info(f"🔍 开始加载模板，扫描目录: {self.template_dir}")
+
         if not self.template_dir.exists():
-            logger.warning(f"模板目录不存在: {self.template_dir}")
+            logger.error(f"❌ 模板目录不存在: {self.template_dir}")
             return
 
         # 扫描所有 .docx 文件
         docx_files = list(self.template_dir.glob("*.docx"))
+        logger.info(f"📁 找到 {len(docx_files)} 个 .docx 文件: {[f.name for f in docx_files]}")
 
         if not docx_files:
-            logger.warning(f"未找到模板文件: {self.template_dir}")
+            logger.warning(f"⚠️ 未找到模板文件: {self.template_dir}")
             return
 
         loaded_count = 0
         for file_path in docx_files:
             try:
+                logger.info(f"📋 正在加载模板: {file_path.name}")
                 template_info = TemplateInfo(str(file_path))
                 self.templates[template_info.template_id] = template_info
                 loaded_count += 1
-                logger.debug(f"加载模板: {template_info.name} ({template_info.template_id})")
+                logger.info(f"✅ 模板加载成功: {template_info.name} (ID: {template_info.template_id}, 大小: {template_info.file_size} bytes)")
             except Exception as e:
-                logger.error(f"加载模板失败 {file_path}: {e}")
+                logger.error(f"❌ 加载模板失败 {file_path}: {e}")
+                import traceback
+                logger.error(f"详细错误: {traceback.format_exc()}")
 
         # 设置默认模板（第一个有效的模板）
         self._set_default_template()
 
-        logger.info(f"模板加载完成，共加载 {loaded_count} 个模板")
+        logger.info(f"🎉 模板加载完成，共加载 {loaded_count} 个模板")
+        logger.info(f"📋 可用模板ID: {list(self.templates.keys())}")
+        if self.default_template_id:
+            logger.info(f"🎯 默认模板ID: {self.default_template_id}")
 
     def _set_default_template(self):
         """设置默认模板"""
